@@ -1,0 +1,159 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-test-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-role-test-bindings
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-test-role
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrole
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  - "apps"
+  resources:
+  - deployments
+  - statefulsets
+  - services
+  - endpoints
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrolebinding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: testrole
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrole
+  namespace: prometheus-example
+rules:
+- apiGroups:
+  - ""
+  - "apps"
+  resources:
+  - deployments
+  - statefulsets
+  - services
+  - endpoints
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrolebinding
+  namespace: prometheus-example
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: testrole
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrolebinding
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: testrole
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrole
+  namespace: prometheus-example-faulty
+rules:
+- apiGroups:
+  - ""
+  - "apps"
+  resources:
+  - deployments
+  - statefulsets
+  - services
+  - endpoints
+  - pods
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: observability
+  name: testrolebinding
+  namespace: prometheus-example-faulty
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: testrole
+subjects:
+- kind: ServiceAccount
+  name: default
+  namespace: default

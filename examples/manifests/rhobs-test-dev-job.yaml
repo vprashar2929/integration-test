@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: test
+    app.kubernetes.io/instance: rhobs-test
+    app.kubernetes.io/name: rhobs-test
+  name: rhobs-test-job
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: test
+        app.kubernetes.io/instance: rhobs-test
+        app.kubernetes.io/name: rhobs-test
+    spec:
+      containers:
+      - args:
+        - --namespaces=prometheus-example,prometheus-example-faulty
+        - --interval=30s
+        - --timeout=1m
+        name: rhobs-test
+        image: localhost:5001/rhobs-test:latest
+        resources: {}
+        volumeMounts: []
+      initContainers: []
+      restartPolicy: OnFailure
+      volumes: []
+  backoffLimit: 4

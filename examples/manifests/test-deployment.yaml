@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prometheus-example
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prometheus-example-faulty
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-example-app-config
+  namespace: prometheus-example
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval:     15s
+      evaluation_interval: 15s
+    scrape_configs:
+      - job_name: 'prometheus'
+        scrape_interval: 5s
+        static_configs:
+          - targets: ['localhost:9090']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-example-app
+  namespace: prometheus-example
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-example-app
+  template:
+    metadata:
+      labels:
+        app: prometheus-example-app
+    spec:
+      containers:
+      - name: prometheus-example-app
+        image: prom/prometheus
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        ports:
+        - name: http
+          containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-example-app-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-example-app
+  namespace: prometheus-example-faulty
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-example-app
+  template:
+    metadata:
+      labels:
+        app: prometheus-example-app
+    spec:
+      containers:
+      - name: prometheus-example-app
+        image: prom/prometheus
+        args:
+        - "--config.file=/etc/prometheus/prometheus.yaml"
+        ports:
+        - name: http
+          containerPort: 9090
