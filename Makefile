@@ -41,6 +41,12 @@ local: kind container-dev
 	kubectl apply -f $(MANIFESTS)/rbac.yaml
 	kubectl apply -f $(MANIFESTS)/rhobs-test-dev-job.yaml
 
+.PHONY: local-faulty
+local-faulty: kind container-dev
+	kubectl apply -f $(MANIFESTS)/test-deployment-faulty.yaml
+	kubectl apply -f $(MANIFESTS)/rbac-faulty.yaml
+	kubectl apply -f $(MANIFESTS)/rhobs-test-dev-job.yaml
+
 .PHONY: clean
 clean:
 	rm -rf kind-with-registry.sh

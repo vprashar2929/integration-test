@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - args:
-        - --namespaces=prometheus-example,prometheus-example-faulty
+        - --namespaces=prometheus-example
         - --interval=30s
         - --timeout=1m
         name: rhobs-test

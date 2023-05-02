@@ -4,11 +4,6 @@ metadata:
   name: prometheus-example
 ---
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: prometheus-example-faulty
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-example-app-config
@@ -30,7 +25,7 @@ metadata:
   name: prometheus-example-app
   namespace: prometheus-example
 spec:
-  replicas: 1
+  replicas: 4
   selector:
     matchLabels:
       app: prometheus-example-app
@@ -54,27 +49,3 @@ spec:
       - name: config
         configMap:
           name: prometheus-example-app-config
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: prometheus-example-app
-  namespace: prometheus-example-faulty
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: prometheus-example-app
-  template:
-    metadata:
-      labels:
-        app: prometheus-example-app
-    spec:
-      containers:
-      - name: prometheus-example-app
-        image: prom/prometheus
-        args:
-        - "--config.file=/etc/prometheus/prometheus.yaml"
-        ports:
-        - name: http
-          containerPort: 9090

@@ -59,6 +59,7 @@ func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, cl
 	return err
 }
 func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespace map[string][]appsv1.StatefulSet, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
+	var errList []error
 	for _, namespace := range namespaces {
 		for _, statefulset := range statefulsetsByNamespace[namespace] {
 			err := wait.Poll(interval, timeout, func() (bool, error) {
@@ -70,10 +71,14 @@ func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespac
 			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error checking the statefulset %s in namespace %s status: %v\n", statefulset.Name, namespace, err)
+				errList = append(errList, err)
 				continue
 			}
 
 		}
+	}
+	if len(errList) != 0 {
+		log.Fatal("To many errors. Statefulsets validation test's failed!!!!!!!!!!")
 	}
 }
 func CheckStatefulSets(namespace []string, clientset *kubernetes.Clientset, interval, timeout time.Duration) {

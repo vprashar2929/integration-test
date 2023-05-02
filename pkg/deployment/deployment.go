@@ -59,6 +59,7 @@ func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clien
 	return err
 }
 func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace map[string][]appsv1.Deployment, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
+	var errList []error
 	for _, namespace := range namespaces {
 		for _, deployment := range deploymentsByNamespace[namespace] {
 			err := wait.Poll(interval, timeout, func() (bool, error) {
@@ -71,10 +72,14 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error checking the deployment %s in namespace %s status: %v\n", deployment.Name, namespace, err)
+				errList = append(errList, err)
 				continue
 			}
 
 		}
+	}
+	if len(errList) != 0 {
+		log.Fatal("To many errors. Deployment validation test's failed!!!!!!!!!!")
 	}
 }
 func CheckDeployments(namespace []string, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
