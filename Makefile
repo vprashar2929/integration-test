@@ -1,10 +1,13 @@
+include .bingo/Variables.mk
+
 DOCKER_REPO ?= quay.io/rh_ee_vprashar/rhobs-test
 BRANCH := $(strip $(shell git rev-parse --abbrev-ref HEAD))
 BUILD_DATE :=$(shell date -u +"%Y-%m-%d")
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
 EXAMPLES := examples
-MANIFESTS := ${EXAMPLES}/manifests
-
+OCP_MANIFESTS := ${EXAMPLES}/manifests/openshift
+DEV_MANIFESTS := ${EXAMPLES}/manifests/dev
+XARGS ?= $(shell which gxargs 2>/dev/null || which xargs)
 all: build
 build: rhobs-test
 
@@ -37,23 +40,28 @@ kind:
 
 .PHONY: local
 local: kind container-dev
-	kubectl apply -f $(MANIFESTS)/test-deployment.yaml
-	kubectl apply -f $(MANIFESTS)/rbac.yaml
-	kubectl apply -f $(MANIFESTS)/rhobs-test-dev-job.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/rbac-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/job-template.yaml
 
 .PHONY: local-faulty
 local-faulty: kind container-dev
-	kubectl apply -f $(MANIFESTS)/test-deployment-faulty.yaml
-	kubectl apply -f $(MANIFESTS)/rbac-faulty.yaml
-	kubectl apply -f $(MANIFESTS)/rhobs-test-dev-job.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-faulty-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/rbac-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/job-template.yaml
 
 .PHONY: clean
 clean:
+	find $(EXAMPLES) -type f ! -name '*.yaml' -delete
+	find $(OCP_MANIFESTS) -type f ! -name '*.yaml' -delete
+	find $(DEV_MANIFESTS) -type f ! -name '*.yaml' -delete
+
+.PHONY: clean-local
+clean-local:
 	rm -rf kind-with-registry.sh
 	rm -rf ./rhobs-test
 	kind delete cluster
-	docker rm -f kind-control-plane
-	docker rm -f kind-registry
+	docker ps -a -q | xargs docker rm -f
 
 .PHONY: container-build
 container-build:
@@ -73,3 +81,15 @@ container-build-push:
 		-t $(DOCKER_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
 		-t $(DOCKER_REPO):latest \
 		.
+rbac-template: $(JSONNET) $(JSONNETFMT) $(GOJSONTOYAML)
+	echo "Running rbac template"
+	$(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i jsonnet/ocp-manifests.jsonnet
+	$(JSONNET) -m $(OCP_MANIFESTS) jsonnet/ocp-manifests.jsonnet | $(XARGS) -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
+	make clean
+dev-template: $(JSONNET) $(JSONNETFMT) $(GOJSONTOYAML)
+	echo "Running dev rbac templates"
+	$(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i jsonnet/ocp-manifests.jsonnet
+	$(JSONNET) -m $(DEV_MANIFESTS) jsonnet/dev-manifests.jsonnet | $(XARGS) -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
+	make clean
+.PHONY: manifests
+manifests: rbac-template dev-template
