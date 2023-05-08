@@ -8,6 +8,7 @@ import (
 
 	"github.com/vprashar2929/rhobs-test/pkg/client"
 	"github.com/vprashar2929/rhobs-test/pkg/deployment"
+	"github.com/vprashar2929/rhobs-test/pkg/service"
 	"github.com/vprashar2929/rhobs-test/pkg/statefulset"
 )
 
@@ -34,5 +35,6 @@ func main() {
 	clientset := client.GetClient(kubeconfig)
 	deployment.CheckDeployments(nsList, clientset, interval, timeout)
 	statefulset.CheckStatefulSets(nsList, clientset, interval, timeout)
+	service.CheckServices(nsList, clientset, interval, timeout)
 
 }

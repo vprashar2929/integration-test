@@ -22,6 +22,7 @@ local testConfig = {
     configMapName: 'prometheus-example-app-config',
     replicas: 4,
     image: 'prom/prometheus',
+    serviceName: 'prometheus-example'
 };
 local r = rbac(rbacConfig);
 local roleBinding = r.roleBinding {
@@ -114,6 +115,9 @@ local deployment = d.deployment{
       d.namespace{},
       d.configMap{},
       d.deployment{},
+      d.service{
+        metadata+:{name: testConfig.serviceName},
+      },
     ],
   },
     'test-deployment-faulty-template':{
@@ -123,6 +127,9 @@ local deployment = d.deployment{
       d.namespace{},
       d.configMap{},
       deployment{},
+      d.service{
+        metadata+:{name: testConfig.serviceName},
+      },
     ],
   },
 

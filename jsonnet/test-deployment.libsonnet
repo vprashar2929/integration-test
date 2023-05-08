@@ -7,6 +7,10 @@ local defaults = {
     data::{
        'prometheus.yml': "global:\n  scrape_interval:     15s\n  evaluation_interval: 15s\nscrape_configs:\n  - job_name: 'prometheus'\n    scrape_interval: 5s\n    static_configs:\n      - targets: ['localhost:9090']\n", 
     },
+    serviceName: error 'must provide service name',
+    labels::{
+        'app': 'prometheus-example-app',
+    },
 };
 function(params){
     local prom = self,
@@ -32,6 +36,7 @@ function(params){
         kind: 'Deployment',
         metadata:{
             name: 'prometheus-example-app',
+            labels: prom.config.labels,
             namespace: prom.config.namespace,
         },
         spec:{
@@ -78,6 +83,31 @@ function(params){
                         },
                     ],
                 },
+            },
+        },
+    },
+    service:{
+        apiVersion: 'v1',
+        kind: 'Service',
+        metadata:{
+            name: prom.config.serviceName,
+            labels: prom.config.labels,
+            namespace: prom.config.namespace
+        },
+        spec:{
+            type: 'ClusterIP',
+            ports:[
+                {
+                    protocol: 'TCP',
+                    port: 9090,
+                    targetPort: 9090,
+                    name: 'http',
+
+
+                },
+            ],
+            selector:{
+                'app': 'prometheus-example-app',
             },
         },
     },

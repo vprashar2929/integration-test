@@ -20,11 +20,13 @@ objects:
             - targets: ['localhost:9090']
   kind: ConfigMap
   metadata:
-    name: '{PROM_CONFIG_MAP}'
+    name: ${PROM_CONFIG_MAP}
     namespace: ${PROM_NAMESPACE}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
+    labels:
+      app: prometheus-example-app
     name: prometheus-example-app
     namespace: ${PROM_NAMESPACE}
   spec:
@@ -52,6 +54,22 @@ objects:
         - configMap:
             name: ${PROM_CONFIG_MAP}
           name: config
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: prometheus-example-app
+    name: ${PROM_SERVICE_NAME}
+    namespace: ${PROM_NAMESPACE}
+  spec:
+    ports:
+    - name: http
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+    selector:
+      app: prometheus-example-app
+    type: ClusterIP
 parameters:
 - name: PROM_NAMESPACE
   value: prometheus-example
@@ -61,3 +79,5 @@ parameters:
   value: prom/prometheus
 - name: PROM_REPLICAS
   value: "4"
+- name: PROM_SERVICE_NAME
+  value: prometheus-example

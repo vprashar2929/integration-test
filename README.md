@@ -8,7 +8,7 @@ The tool aims to provide a simple and easy-to-use way for defining such cluster 
 
 ## Features(WIP)
 - Intract with OpenShift/Kubernetes cluster via Incluster config or Kubeconfig.
-- Validates deployments, statefulsets, services(***Not implemented yet***), pvc's health(***Not implemented yet***) inside the namespace after rollout.
+- Validates deployments, statefulsets, services, pvc's health(***Not implemented yet***) inside the namespace after rollout.
 - Validates external network connectivity(***Not implemented yet***).
 - Checks API endpoint's used(***Not implemented yet***).
 - Validates resource utilization(***Not implemented yet***).

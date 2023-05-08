@@ -22,6 +22,8 @@ items:
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
+    labels:
+      app: prometheus-example-app
     name: prometheus-example-app
     namespace: prometheus-example
   spec:
@@ -49,4 +51,20 @@ items:
         - configMap:
             name: prometheus-example-app-config
           name: config
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: prometheus-example-app
+    name: prometheus-example
+    namespace: prometheus-example
+  spec:
+    ports:
+    - name: http
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+    selector:
+      app: prometheus-example-app
+    type: ClusterIP
 kind: List

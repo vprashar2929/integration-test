@@ -32,6 +32,7 @@ local testConfig = {
   configMapName: '${PROM_CONFIG_MAP}',
   replicas: '${PROM_REPLICAS}',
   image: '${PROM_IMAGE}',
+  serviceName: '${PROM_SERVICE_NAME}',
 };
 local r = rbac(rbacConfig);
 local j = job(jobConfig);
@@ -195,15 +196,19 @@ local deployment = d.deployment {
         metadata+: { name: '${PROM_NAMESPACE}' },
       },
       d.configMap {
-        metadata+: { name: '{PROM_CONFIG_MAP}', namespace: '${PROM_NAMESPACE}' },
+        metadata+: { name: '${PROM_CONFIG_MAP}', namespace: '${PROM_NAMESPACE}' },
       },
       d.deployment {},
+      d.service {
+        metadata+: { name: '${PROM_SERVICE_NAME}' },
+      },
     ],
     parameters: [
       { name: 'PROM_NAMESPACE', value: 'prometheus-example' },
       { name: 'PROM_CONFIG_MAP', value: 'prometheus-example-app-config' },
       { name: 'PROM_IMAGE', value: 'prom/prometheus' },
       { name: 'PROM_REPLICAS', value: '4' },
+      { name: 'PROM_SERVICE_NAME', value: 'prometheus-example' },
     ],
   },
   'test-deployment-faulty-template': {
@@ -217,15 +222,19 @@ local deployment = d.deployment {
         metadata+: { name: '${PROM_NAMESPACE}' },
       },
       d.configMap {
-        metadata+: { name: '{PROM_CONFIG_MAP}', namespace: '${PROM_NAMESPACE}' },
+        metadata+: { name: '${PROM_CONFIG_MAP}', namespace: '${PROM_NAMESPACE}' },
       },
       deployment {},
+      d.service {
+        metadata+: { name: '${PROM_SERVICE_NAME}' },
+      },
     ],
     parameters: [
       { name: 'PROM_NAMESPACE', value: 'prometheus-example' },
       { name: 'PROM_CONFIG_MAP', value: 'prometheus-example-app-config' },
       { name: 'PROM_IMAGE', value: 'prom/prometheus' },
-      { name: 'PROM_REPLICAS', value: 4 },
+      { name: 'PROM_REPLICAS', value: '4' },
+      { name: 'PROM_SERVICE_NAME', value: 'prometheus-example' },
     ],
   },
 }
