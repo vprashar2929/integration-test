@@ -6,8 +6,7 @@ import (
 	"log"
 	"time"
 
-	"os"
-
+	"github.com/vprashar2929/rhobs-test/pkg/pod"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,14 +23,14 @@ func getDeployment(namespace string, clientset *kubernetes.Clientset) *appsv1.De
 
 	return deployment
 }
-func storeDeploymentsByNamespace(namespaces []string, clientset *kubernetes.Clientset) (map[string][]appsv1.Deployment, error) {
+func storeDeploymentsByNamespace(namespaces []string, clientset *kubernetes.Clientset) map[string][]appsv1.Deployment {
 	deploymentsByNamespace := make(map[string][]appsv1.Deployment)
 	for _, namespace := range namespaces {
 		deploymentList := getDeployment(namespace, clientset)
 		// Store the deployments by namespace in the map
 		deploymentsByNamespace[namespace] = deploymentList.Items
 	}
-	return deploymentsByNamespace, nil
+	return deploymentsByNamespace
 }
 func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clientset *kubernetes.Clientset) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -43,18 +42,18 @@ func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clien
 			updatedDeployment.Status.Replicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.AvailableReplicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.ObservedGeneration >= deployment.Generation {
-			fmt.Printf("Deployment %s is available in namespace %s\n", deployment.Name, namespace)
-			return nil
+			log.Printf("Deployment %s is available in namespace %s\n", deployment.Name, namespace)
+			return pod.GetPodStatus(namespace, deployment.Name, clientset)
 		} else {
 			for _, condition := range updatedDeployment.Status.Conditions {
 				if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionFalse {
-					fmt.Printf("Reason: %v\n", condition.Reason)
+					log.Printf("Reason: %v\n", condition.Reason)
 					break
 				}
 			}
 		}
-		fmt.Printf("Waiting for deployment %s to be available in namespace %s\n", deployment.Name, namespace)
-		return fmt.Errorf("deployment %s is not available yet in namespace %s\n", deployment.Name, namespace)
+		log.Printf("Waiting for deployment %s to be available in namespace %s\n", deployment.Name, namespace)
+		return fmt.Errorf("deployment %s is not available yet in namespace %s", deployment.Name, namespace)
 	})
 	return err
 }
@@ -65,13 +64,13 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 			err := wait.Poll(interval, timeout, func() (bool, error) {
 				err := checkDeploymentStatus(namespace, deployment, clientset)
 				if err != nil {
-					return false, nil
+					return false, err
 				}
 				return true, nil
 
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error checking the deployment %s in namespace %s status: %v\n", deployment.Name, namespace, err)
+				log.Printf("Error checking the deployment %s in namespace %s\n status: %v\n", deployment.Name, namespace, err)
 				errList = append(errList, err)
 				continue
 			}
@@ -83,9 +82,6 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 	}
 }
 func CheckDeployments(namespace []string, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
-	deploymentsByNamespace, err := storeDeploymentsByNamespace(namespace, clientset)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error storing deployments by namespaces: %v\n", err)
-	}
+	deploymentsByNamespace := storeDeploymentsByNamespace(namespace, clientset)
 	validateDeploymentsByNamespace(namespace, deploymentsByNamespace, clientset, interval, timeout)
 }

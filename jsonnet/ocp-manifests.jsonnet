@@ -40,7 +40,7 @@ local d = testdeployment(testConfig);
 local role = r.role {
   rules: [{
     apiGroups: ['', 'apps'],
-    resources: ['services', 'endpoints', 'pods', 'deployments', 'statefulsets'],
+    resources: ['services', 'endpoints', 'pods', 'deployments', 'statefulsets', 'pods/log'],
     verbs: ['get', 'list', 'watch'],
 
   }],
