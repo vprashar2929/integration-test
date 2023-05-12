@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
@@ -43,7 +44,7 @@ func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, cl
 			updatedStatefulSet.Status.AvailableReplicas == *statefulset.Spec.Replicas &&
 			updatedStatefulSet.Status.ObservedGeneration >= statefulset.Generation {
 			log.Printf("statefulset %s is available in namespace %s\n", statefulset.Name, namespace)
-			return pod.GetPodStatus(namespace, statefulset.Name, clientset)
+			return pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
 		} else {
 			for _, condition := range updatedStatefulSet.Status.Conditions {
 				if condition.Type == "StatefulSetReplicasReady" && condition.Status == corev1.ConditionFalse {

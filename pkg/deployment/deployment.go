@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
@@ -43,7 +44,7 @@ func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clien
 			updatedDeployment.Status.AvailableReplicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.ObservedGeneration >= deployment.Generation {
 			log.Printf("Deployment %s is available in namespace %s\n", deployment.Name, namespace)
-			return pod.GetPodStatus(namespace, deployment.Name, clientset)
+			return pod.GetPodStatus(namespace, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), clientset)
 		} else {
 			for _, condition := range updatedDeployment.Status.Conditions {
 				if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionFalse {
@@ -70,7 +71,7 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 
 			})
 			if err != nil {
-				log.Printf("Error checking the deployment %s in namespace %s\n status: %v\n", deployment.Name, namespace, err)
+				log.Printf("Error checking the deployment %s in namespace %s\nerror: %v\n", deployment.Name, namespace, err)
 				errList = append(errList, err)
 				continue
 			}
