@@ -18,11 +18,11 @@ func checkPodStatus(namespace string, labels labels.Selector, clientset *kuberne
 	seconds := int64(300)
 	podList, err := clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: labels.String()})
 	if err != nil {
-		return fmt.Errorf("cannot list pod's in namespace %s: %v", namespace, err)
+		return fmt.Errorf("cannot list pod's inside namespace: %s: %v", namespace, err)
 	}
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != "Running" {
-			return fmt.Errorf("pod: %s is not running in namespace: %s: %v", pod.Name, namespace, err)
+			return fmt.Errorf("pod: %s is not running inside namespace: %s: %v", pod.Name, namespace, err)
 
 		}
 		for _, container := range pod.Spec.Containers {
@@ -32,7 +32,7 @@ func checkPodStatus(namespace string, labels labels.Selector, clientset *kuberne
 			}
 			for _, line := range strings.Split(string(logs), "\\n") {
 				if strings.Contains(line, "error") || strings.Contains(line, "Error") || strings.Contains(line, "Exception") || strings.Contains(line, "exception") {
-					return fmt.Errorf("container: %s inside pod: %s has errors in its logs: \n%s", container.Name, pod.Name, line)
+					return fmt.Errorf("container: %s inside pod: %s has errors in logs: \n%s", container.Name, pod.Name, line)
 				}
 			}
 		}

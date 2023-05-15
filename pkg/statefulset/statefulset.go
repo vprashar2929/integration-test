@@ -48,7 +48,7 @@ func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, cl
 		} else {
 			for _, condition := range updatedStatefulSet.Status.Conditions {
 				if condition.Type == "StatefulSetReplicasReady" && condition.Status == corev1.ConditionFalse {
-					fmt.Printf("Reason: %v\n", condition.Reason)
+					log.Printf("Reason: %v\n", condition.Reason)
 					break
 				}
 			}
