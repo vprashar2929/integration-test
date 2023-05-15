@@ -2,7 +2,6 @@ package deployment
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -54,7 +53,7 @@ func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clien
 			}
 		}
 		log.Printf("Waiting for deployment %s to be available in namespace %s\n", deployment.Name, namespace)
-		return fmt.Errorf("deployment %s is not available yet in namespace %s", deployment.Name, namespace)
+		return pod.GetPodStatus(namespace, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), clientset)
 	})
 	return err
 }
@@ -71,7 +70,7 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 
 			})
 			if err != nil {
-				log.Printf("Error checking the deployment %s in namespace %s\nerror: %v\n", deployment.Name, namespace, err)
+				log.Printf("Error checking the deployment %s in namespace %s Reason: %v\n", deployment.Name, namespace, err)
 				errList = append(errList, err)
 				continue
 			}

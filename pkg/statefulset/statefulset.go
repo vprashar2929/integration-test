@@ -2,7 +2,6 @@ package statefulset
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -54,7 +53,7 @@ func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, cl
 			}
 		}
 		log.Printf("Waiting for statefulset %s to be available in namespace %s\n", statefulset.Name, namespace)
-		return fmt.Errorf("statefulset %s is not available yet in namespace %s", statefulset.Name, namespace)
+		return pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
 	})
 	return err
 }
@@ -70,7 +69,7 @@ func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespac
 				return true, nil
 			})
 			if err != nil {
-				log.Printf("Error checking the statefulset %s in namespace %s status: %v\n", statefulset.Name, namespace, err)
+				log.Printf("Error checking the statefulset %s in namespace %s Reason: %v\n", statefulset.Name, namespace, err)
 				errList = append(errList, err)
 				continue
 			}
