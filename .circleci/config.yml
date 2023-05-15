@@ -1,0 +1,17 @@
+version: 2.1
+jobs:
+  build:
+    docker:
+    - image: cimg/go:1.19
+    steps:
+    - checkout
+    - run: make vendor
+    - run: make manifests
+    - run: git diff --exit-code
+    - run: docker login -u $QUAY_TOKEN
+    - run: make container-build-push
+workflows:
+  version: 2
+  build:
+    jobs:
+    - build
