@@ -6,8 +6,6 @@ import (
 	"log"
 	"time"
 
-	"os"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -45,7 +43,7 @@ func checkServiceStatus(namespace string, service corev1.Service, clientset *kub
 				for _, endpointPort := range subset.Ports {
 					if endpointPort.Name == port.Name && endpointPort.Port == port.Port {
 						if len(subset.Addresses) > 0 {
-							fmt.Printf("Service %s is available in namespace %s\n", service.Name, namespace)
+							log.Printf("Service %s is available in namespace %s\n", service.Name, namespace)
 							return nil
 						}
 					}
@@ -53,8 +51,8 @@ func checkServiceStatus(namespace string, service corev1.Service, clientset *kub
 				}
 			}
 		}
-		fmt.Printf("Waiting for service %s to be available in namespace %s\n", service.Name, namespace)
-		return fmt.Errorf("service %s is not available yet in namespace %s\n", service.Name, namespace)
+		log.Printf("Waiting for service %s to be available in namespace %s\n", service.Name, namespace)
+		return fmt.Errorf("service %s is not available yet in namespace %s", service.Name, namespace)
 	})
 	return err
 }
@@ -70,7 +68,7 @@ func validateServicesByNamespace(namespaces []string, serviceByNamespace map[str
 				return true, nil
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error checking the service %s in namespace %s status: %v\n", service.Name, namespace, err)
+				log.Printf("Error checking the service %s in namespace %s status: %v\n", service.Name, namespace, err)
 				errList = append(errList, err)
 				continue
 			}

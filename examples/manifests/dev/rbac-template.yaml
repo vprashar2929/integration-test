@@ -25,6 +25,7 @@ items:
     - endpoints
     - pods
     - namespaces
+    - pods/log
     verbs:
     - get
     - list
@@ -62,6 +63,7 @@ items:
     - endpoints
     - pods
     - namespaces
+    - pods/log
     verbs:
     - get
     - list

@@ -27,6 +27,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -63,6 +64,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -99,6 +101,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -135,6 +138,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -171,6 +175,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -207,6 +212,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
@@ -243,6 +249,7 @@ objects:
     - pods
     - deployments
     - statefulsets
+    - pods/log
     verbs:
     - get
     - list
