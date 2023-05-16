@@ -1,0 +1,44 @@
+version: 2.1
+jobs:
+  make:
+    docker:
+    - image: cimg/go:1.19
+    steps:
+    - checkout
+    - run:
+        command: make vendor
+    - run:
+        command: make manifests
+    - run:
+        command: git diff --exit-code
+  build:
+    docker:
+    - image: cimg/go:1.19
+    steps:
+    - checkout
+    - setup_remote_docker:
+        version: 20.10.18
+        docker_layer_caching: true
+    - run:
+        name: setup Qemu
+        command: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - run:
+        name: create builder
+        command: |
+          docker context create multi-arch-build
+          docker buildx create --use multi-arch-build
+    - run:
+        name: docker login
+        command: |
+          docker login -u $QUAY_USER -p $QUAY_TOKEN quay.io
+    - run:
+        name: Build application docker image and push to registry
+        command: make container-build-push
+workflows:
+  version: 2
+  make-and-build:
+    jobs:
+    - make
+    - build:
+        requires:
+        - make
