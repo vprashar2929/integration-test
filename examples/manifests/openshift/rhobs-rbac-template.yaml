@@ -271,7 +271,7 @@ objects:
     namespace: ${NAMESPACE}
 parameters:
 - name: NAMESPACE
-  value: default
+  value: observatorium
 - name: OBSERVATORIUM_NAMESPACE
   value: observatorium
 - name: OBSERVATORIUM_METRICS_NAMESPACE

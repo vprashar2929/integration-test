@@ -156,7 +156,7 @@ local deployment = d.deployment {
 
     ],
     parameters: [
-      { name: 'NAMESPACE', value: 'default' },
+      { name: 'NAMESPACE', value: 'observatorium' },
       { name: 'OBSERVATORIUM_NAMESPACE', value: 'observatorium' },
       { name: 'OBSERVATORIUM_METRICS_NAMESPACE', value: 'observatorium-metrics' },
       { name: 'OBSERVATORIUM_LOGS_NAMESPACE', value: 'observatorium-logs' },
@@ -170,7 +170,7 @@ local deployment = d.deployment {
     apiVersion: 'template.openshift.io/v1',
     kind: 'Template',
     metadata: {
-      name: 'rhobs-test-rbac',
+      name: 'rhobs-test-job',
     },
     objects: [
       j.job,
