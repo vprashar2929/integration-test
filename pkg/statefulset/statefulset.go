@@ -2,6 +2,7 @@ package statefulset
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -15,24 +16,41 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-func getStatefulSet(namespace string, clientset *kubernetes.Clientset) *appsv1.StatefulSetList {
+func getStatefulSet(namespace string, clientset kubernetes.Interface) (*appsv1.StatefulSetList, error) {
 	statefulset, err := clientset.AppsV1().StatefulSets(namespace).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		log.Fatalf("error listing statefulsets in namespace %s: %v\n", namespace, err)
+		return nil, fmt.Errorf("error listing statefulsets in namespace %s: %v\n", namespace, err)
 	}
-
-	return statefulset
+	return statefulset, nil
 }
-func storeStatefulsetsByNamespace(namespaces []string, clientset *kubernetes.Clientset) map[string][]appsv1.StatefulSet {
+func storeStatefulSetsByNamespace(namespaces []string, clientset kubernetes.Interface) (map[string][]appsv1.StatefulSet, error) {
+	if len(namespaces) <= 0 {
+		return nil, fmt.Errorf("no namespace provided\n")
+	}
 	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
 	for _, namespace := range namespaces {
-		StatefulSetList := getStatefulSet(namespace, clientset)
-		// Store the statefulsets by namespace in the map
-		statefulsetsByNamespace[namespace] = StatefulSetList.Items
+		if namespace != "" {
+			statefulSetList, err := getStatefulSet(namespace, clientset)
+			if err != nil {
+				return nil, err
+			}
+			if len(statefulSetList.Items) > 0 {
+				// Store the statefulsets by namespace in the map
+				statefulsetsByNamespace[namespace] = statefulSetList.Items
+			} else {
+				log.Printf("no statefulset found under the namespace: %s\n", namespace)
+			}
+		} else {
+			log.Printf("invalid namespace provided: %s\n", namespace)
+		}
+
 	}
-	return statefulsetsByNamespace
+	if len(statefulsetsByNamespace) <= 0 {
+		return nil, fmt.Errorf("there is no statefulset in provided namespace: %v\n", namespaces)
+	}
+	return statefulsetsByNamespace, nil
 }
-func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, clientset *kubernetes.Clientset) error {
+func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, clientset kubernetes.Interface) error {
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		updatedStatefulSet, err := clientset.AppsV1().StatefulSets(namespace).Get(context.Background(), statefulset.Name, metav1.GetOptions{})
 		if err != nil {
@@ -43,22 +61,33 @@ func checkStatefulSetStatus(namespace string, statefulset appsv1.StatefulSet, cl
 			updatedStatefulSet.Status.AvailableReplicas == *statefulset.Spec.Replicas &&
 			updatedStatefulSet.Status.ObservedGeneration >= statefulset.Generation {
 			log.Printf("statefulset %s is available in namespace %s\n", statefulset.Name, namespace)
-			return pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
+			return nil
 		} else {
+			log.Printf("statefulset %s is not available in namespace %s. checking condition\n", statefulset.Name, namespace)
 			for _, condition := range updatedStatefulSet.Status.Conditions {
 				if condition.Type == "StatefulSetReplicasReady" && condition.Status == corev1.ConditionFalse {
-					log.Printf("Reason: %v\n", condition.Reason)
+					log.Printf("reason: %v\n", condition.Reason)
 					break
 				}
 			}
 		}
-		log.Printf("Waiting for statefulset %s to be available in namespace %s\n", statefulset.Name, namespace)
-		return pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
+		log.Printf("waiting for statefulset %s to be available in namespace %s\n", statefulset.Name, namespace)
+		return fmt.Errorf("statefulset %s is not in healthy state inside namespace %s\n", statefulset.Name, namespace)
 	})
 	return err
 }
-func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespace map[string][]appsv1.StatefulSet, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
-	var errList []error
+func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespace map[string][]appsv1.StatefulSet, clientset kubernetes.Interface, interval, timeout time.Duration) error {
+	var stsErrorList []error
+	var podErrList []error
+	if len(namespaces) <= 0 {
+		return fmt.Errorf("namespace list empty %v. no namespace provided. please provide atleast one namespace\n", namespaces)
+	}
+	if len(statefulsetsByNamespace) <= 0 {
+		return fmt.Errorf("no statefulset found in namespace. skipping statefulset validations\n")
+	}
+	if interval.Seconds() <= 0 || timeout.Seconds() <= 0 {
+		return fmt.Errorf("interval or timeout is invalid. please provide the valid interval or timeout duration\n")
+	}
 	for _, namespace := range namespaces {
 		for _, statefulset := range statefulsetsByNamespace[namespace] {
 			err := wait.Poll(interval, timeout, func() (bool, error) {
@@ -69,18 +98,36 @@ func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespac
 				return true, nil
 			})
 			if err != nil {
-				log.Printf("Error checking the statefulset %s in namespace %s Reason: %v\n", statefulset.Name, namespace, err)
-				errList = append(errList, err)
-				continue
+				log.Printf("error checking the statefulset %s in namespace %s reason: %v\n", statefulset.Name, namespace, err)
+				stsErrorList = append(stsErrorList, err)
+			}
+			err = wait.Poll(interval, timeout, func() (bool, error) {
+				err := pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
+				if err != nil {
+					return false, err
+				}
+				return true, nil
+			})
+			if err != nil {
+				log.Printf("error checking the pod logs for statefulset %s in namespace %s, reason: %v\n", statefulset.Name, namespace, err)
+				podErrList = append(podErrList, err)
 			}
 
 		}
 	}
-	if len(errList) != 0 {
-		log.Fatal("To many errors. Statefulsets validation test's failed!!!!!!!!!!")
+	if len(stsErrorList) != 0 || len(podErrList) != 0 {
+		return fmt.Errorf("to many errors. statefulsets validation test's failed\n")
 	}
+	return nil
 }
-func CheckStatefulSets(namespace []string, clientset *kubernetes.Clientset, interval, timeout time.Duration) {
-	statefulsetsByNamespace := storeStatefulsetsByNamespace(namespace, clientset)
-	validateStatefulSetsByNamespace(namespace, statefulsetsByNamespace, clientset, interval, timeout)
+func CheckStatefulSets(namespace []string, clientset kubernetes.Interface, interval, timeout time.Duration) error {
+	statefulsetsByNamespace, err := storeStatefulSetsByNamespace(namespace, clientset)
+	if err != nil {
+		return err
+	}
+	err = validateStatefulSetsByNamespace(namespace, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != nil {
+		return err
+	}
+	return nil
 }
