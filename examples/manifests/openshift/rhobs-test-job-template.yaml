@@ -1,7 +1,7 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
-  name: rhobs-test-rbac
+  name: rhobs-test-job
 objects:
 - apiVersion: batch/v1
   kind: Job
