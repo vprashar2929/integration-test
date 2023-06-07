@@ -38,6 +38,13 @@ kind:
 	chmod 755 kind-with-registry.sh
 	./kind-with-registry.sh
 
+.PHONY: test
+test: kind
+	kind get kubeconfig > kubeconfig
+	go test ./pkg/deployment
+	go test ./pkg/statefulset
+	go test ./pkg/pod
+	
 .PHONY: local
 local: kind container-dev
 	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-template.yaml
@@ -58,10 +65,18 @@ clean:
 
 .PHONY: clean-local
 clean-local:
-	rm -rf kind-with-registry.sh
-	rm -rf ./rhobs-test
+	rm -f kind-with-registry.sh
+	rm -f ./rhobs-test
 	kind delete cluster
 	docker ps -a -q | xargs docker rm -f
+
+.PHONY: clean-test
+clean-test:
+	rm -f kind-with-registry.sh
+	rm -f ./rhobs-test
+	kind delete cluster
+	docker ps -a -q | xargs docker rm -f
+	rm -f kubeconfig
 
 .PHONY: container-build
 container-build:

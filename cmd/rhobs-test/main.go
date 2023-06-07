@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"strings"
 
 	"flag"
@@ -23,6 +24,7 @@ var (
 	kubeconfig string
 	interval   time.Duration
 	timeout    time.Duration
+	errList    []error
 )
 
 func main() {
@@ -33,8 +35,22 @@ func main() {
 	flag.Parse()
 	nsList := strings.Split(namespace, ",")
 	clientset := client.GetClient(kubeconfig)
-	deployment.CheckDeployments(nsList, clientset, interval, timeout)
-	statefulset.CheckStatefulSets(nsList, clientset, interval, timeout)
-	service.CheckServices(nsList, clientset, interval, timeout)
-
+	err := deployment.CheckDeployments(nsList, clientset, interval, timeout)
+	if err != nil {
+		log.Printf("cannot validate deployements. reason: %v\n", err)
+		errList = append(errList, err)
+	}
+	err = statefulset.CheckStatefulSets(nsList, clientset, interval, timeout)
+	if err != nil {
+		log.Printf("cannot validate statefulsets. reason: %v\n", err)
+		errList = append(errList, err)
+	}
+	err = service.CheckServices(nsList, clientset, interval, timeout)
+	if err != nil {
+		log.Printf("cannot validate services. reason: %v\n", err)
+		errList = append(errList, err)
+	}
+	if len(errList) > 0 {
+		log.Fatalf("error occured while running tests")
+	}
 }
