@@ -178,7 +178,7 @@ local deployment = d.deployment {
     parameters: [
       { name: 'JOB_NAMESPACES', value: 'observatorium,observatorium-metrics,observatorium-logs,minio,dex,telemeter' },
       { name: 'JOB_NAME', value: 'rhobs-test-job' },
-      { name: 'JOB_INTERVAL', value: '30s' },
+      { name: 'JOB_INTERVAL', value: '10s' },
       { name: 'JOB_TIMEOUT', value: '1m' },
       { name: 'JOB_IMAGE', value: 'quay.io/rh_ee_vprashar/rhobs-test' },
       { name: 'JOB_IMAGE_TAG', value: 'latest' },

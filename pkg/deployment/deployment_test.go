@@ -3,6 +3,7 @@ package deployment
 import (
 	"context"
 	"io"
+
 	"log"
 	"os"
 
@@ -114,8 +115,8 @@ func TestGetDeploymentNegative(t *testing.T) {
 				if err != nil {
 					t.Errorf("%v", err)
 				}
-				if len(got.Items) != 0 {
-					t.Errorf("getDeployment() returned wrong deployment for non-existent namespace got: %d, expected: %d\n", len(got.Items), len(tt.want.Items))
+				if got != nil {
+					t.Errorf("getDeployment() returned wrong deployment for non-existent namespace got: %d, expected: %v\n", len(got.Items), nil)
 				}
 				// case "Test with invalid clientset":
 				// 	if err != nil {

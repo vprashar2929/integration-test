@@ -38,7 +38,7 @@ parameters:
 - name: JOB_NAME
   value: rhobs-test-job
 - name: JOB_INTERVAL
-  value: 30s
+  value: 10s
 - name: JOB_TIMEOUT
   value: 1m
 - name: JOB_IMAGE

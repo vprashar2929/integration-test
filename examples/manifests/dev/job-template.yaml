@@ -19,8 +19,8 @@ items:
         containers:
         - args:
           - --namespaces=prometheus-example
-          - --interval=30s
-          - --timeout=1m
+          - --interval=5s
+          - --timeout=60s
           image: localhost:5001/rhobs-test:latest
           name: rhobs-test-job
           resources: {}
