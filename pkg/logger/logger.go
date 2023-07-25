@@ -5,9 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
-
-	"golang.org/x/term"
+	// "strings"
+	// "golang.org/x/term"
 )
 
 type Level int
@@ -81,8 +80,9 @@ func (c *CustomLogger) LogFatal(format string, v ...interface{}) {
 	}
 }
 func (c *CustomLogger) LogSeperator() {
-	width, _, _ := term.GetSize(int(os.Stdout.Fd()))
-	separator := strings.Repeat("▁", width)
+	// width, _, _ := term.GetSize(int(os.Stdout.Fd()))
+	// separator := strings.Repeat("▁", width)
+	separator := "\n---------------------------------------------------\n"
 	c.Separator.Printf(separator)
 }
 func (c *CustomLogger) LogStartup(cfgs ...interface{}) {

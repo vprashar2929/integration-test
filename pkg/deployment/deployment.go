@@ -17,6 +17,23 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+// TODO: Come up with better solution
+// This is done so that unit test can work fine as retry.RetryOnConflict only works on real Kubernetes cluster
+// we are using fake to build up mock client for UT
+type Retryer interface {
+	RetryOnConflict(backoff wait.Backoff, fn func() error) error
+}
+
+type DefaultRetryer struct{}
+
+func (r *DefaultRetryer) RetryOnConflict(backoff wait.Backoff, fn func() error) error {
+	return retry.RetryOnConflict(backoff, fn)
+}
+
+var (
+	retryer Retryer = &DefaultRetryer{}
+)
+
 var (
 	ErrListingDeployment     = errors.New("error listing deployments in namespace")
 	ErrNoDeployment          = errors.New("error no deployments found inside namespace")
@@ -39,7 +56,7 @@ func getDeployment(namespace string, clientset kubernetes.Interface) (*appsv1.De
 }
 func storeDeploymentsByNamespace(namespaces []string, clientset kubernetes.Interface) (map[string][]appsv1.Deployment, error) {
 	if len(namespaces) <= 0 {
-		logger.AppLog.LogInfo("no namespace provided")
+		logger.AppLog.LogWarning("no namespace provided")
 		return nil, ErrNoNamespace
 	}
 	deploymentsByNamespace := make(map[string][]appsv1.Deployment)
@@ -65,7 +82,7 @@ func storeDeploymentsByNamespace(namespaces []string, clientset kubernetes.Inter
 	return deploymentsByNamespace, nil
 }
 func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clientset kubernetes.Interface) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retryer.RetryOnConflict(retry.DefaultRetry, func() error {
 		updatedDeployment, err := clientset.AppsV1().Deployments(namespace).Get(context.Background(), deployment.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -95,13 +112,14 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 	var depErrList []error
 	var podErrList []error
 	if len(namespaces) <= 0 {
-		logger.AppLog.LogWarning("namespace list empty %v. no namespace provided. please provide atleast one namespace\n", namespaces)
+		logger.AppLog.LogError("namespace list empty %v. no namespace provided. please provide atleast one namespace\n", namespaces)
 		return ErrNamespaceEmpty
 	}
 	if len(deploymentsByNamespace) <= 0 {
 		return ErrNoDeployment
 	}
 	if interval.Seconds() <= 0 || timeout.Seconds() <= 0 {
+		logger.AppLog.LogError("interval or timeout is invalid. please provide the valid interval or timeout duration\n")
 		return ErrInvalidInterval
 		// fmt.Errorf("interval or timeout is invalid. please provide the valid interval or timeout duration\n")
 	}

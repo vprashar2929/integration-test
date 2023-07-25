@@ -14,13 +14,29 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
+// TODO: Come up with better solution
+// This is done so that unit test can work fine as retry.RetryOnConflict only works on real Kubernetes cluster
+// we are using fake to build up mock client for UT
+type Retryer interface {
+	RetryOnConflict(backoff wait.Backoff, fn func() error) error
+}
+
+type DefaultRetryer struct{}
+
+func (r *DefaultRetryer) RetryOnConflict(backoff wait.Backoff, fn func() error) error {
+	return retry.RetryOnConflict(backoff, fn)
+}
+
+var (
+	retryer Retryer = &DefaultRetryer{}
+)
+
 var (
 	ErrNoNamespace       = errors.New("error no namespace provided")
 	ErrListingService    = errors.New("error listing services in namespace")
-	ErrFindingService    = errors.New("error finding services in namespace")
 	ErrNoService         = errors.New("error no service in namespace")
 	ErrNamespaceEmpty    = errors.New("error namespace list empty")
-	ErrServiceNotHealthy = errors.New("error namespace not in healthy state")
+	ErrServiceNotHealthy = errors.New("error service not in healthy state")
 	ErrInvalidInterval   = errors.New("error interval or timeout is invalid")
 	ErrServiceFailed     = errors.New("error service test validation failed")
 )
@@ -36,7 +52,7 @@ func getService(namespace string, clientset kubernetes.Interface) (*corev1.Servi
 	}
 	if len(service.Items) <= 0 {
 		logger.AppLog.LogWarning("cannot find service in the namespace: %s\n", namespace)
-		return nil, ErrFindingService
+		return nil, ErrNoService
 	}
 	return service, nil
 }
@@ -46,21 +62,26 @@ func storeServicesByNamespace(namespaces []string, clientset kubernetes.Interfac
 	}
 	servicesByNamespace := make(map[string][]corev1.Service)
 	for _, namespace := range namespaces {
-		serviceList, err := getService(namespace, clientset)
-		if err != nil {
-			logger.AppLog.LogError("error occured while fetching the service. reason: %v\n", err)
-		}
-		if len(serviceList.Items) > 0 {
+		logger.AppLog.LogInfo("Checking Service status inside namespace %s\n", namespace)
+
+		if namespace != "" {
+			serviceList, err := getService(namespace, clientset)
+			if err != nil {
+				return nil, err
+			}
 			servicesByNamespace[namespace] = serviceList.Items
+		} else {
+			logger.AppLog.LogError("invalid namespace provided: %s\n", namespace)
 		}
 	}
 	if len(servicesByNamespace) <= 0 {
+		logger.AppLog.LogWarning("there is no service in provided namespaces: %v\n", namespaces)
 		return nil, ErrNoService
 	}
 	return servicesByNamespace, nil
 }
 func checkServiceStatus(namespace string, service corev1.Service, clientset kubernetes.Interface) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retryer.RetryOnConflict(retry.DefaultRetry, func() error {
 		updatedService, err := clientset.CoreV1().Services(namespace).Get(context.Background(), service.Name, metav1.GetOptions{})
 		if err != nil {
 			return err

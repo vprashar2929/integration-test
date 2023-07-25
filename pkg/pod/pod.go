@@ -79,7 +79,7 @@ func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernet
 	if len(podList.Items) <= 0 {
 		return ErrNoPod
 	}
-	logger.AppLog.LogInfo("Checking pod status")
+
 	for _, pod := range podList.Items {
 		logger.AppLog.LogDebug("pod name: %s", pod.Name)
 		if pod.Status.Phase != "Running" {
@@ -100,5 +100,6 @@ func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernet
 	return nil
 }
 func GetPodStatus(namespace string, labels labels.Selector, clientset kubernetes.Interface) error {
+	logger.AppLog.LogInfo("Checking pod status")
 	return checkPodHealth(namespace, labels, clientset)
 }
