@@ -1,7 +1,7 @@
 package client
 
 import (
-	"log"
+	"github.com/vprashar2929/rhobs-test/pkg/logger"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -17,19 +17,19 @@ func client(kubeconfig string) *kubernetes.Clientset {
 	if kubeconfig == "" {
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			log.Fatalf("Error getting in-cluster config: %v\n", err)
+			logger.AppLog.LogFatal("Error getting in-cluster config: %v\n", err)
 		}
 	} else {
 		// If kubeconfig file is specified, then use it
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 		if err != nil {
-			log.Fatalf("Error building kubeconfig from file %s: %v\n", kubeconfig, err)
+			logger.AppLog.LogFatal("Error building kubeconfig from file %s: %v\n", kubeconfig, err)
 		}
 	}
 	// Create Kubernetes clientset
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Error creating Kubernetes clientset: %v\n", err)
+		logger.AppLog.LogFatal("Error creating Kubernetes clientset: %v\n", err)
 	}
 	return clientset
 }

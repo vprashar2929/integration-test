@@ -1,759 +1,367 @@
 package statefulset
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"log"
-	"os"
 	"testing"
 	"time"
 
-	helper "github.com/vprashar2929/rhobs-test/pkg/helper"
+	"github.com/vprashar2929/rhobs-test/pkg/logger"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 var (
-	replicas  = int32(1)
-	clientset *kubernetes.Clientset
+	testNS     = "test-namespace"
+	testStset  = "test-statefulset"
+	testLabels = make(map[string]string)
+	testSSList = appsv1.StatefulSetList{
+		Items: []appsv1.StatefulSet{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testStset,
+					Namespace: testNS,
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: testLabels,
+					},
+				},
+			},
+		},
+	}
 )
 
-func TestGetStatefulSetPositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		clientset kubernetes.Interface
-	}
-	tests := struct {
-		name string
-		args args
-		want *appsv1.StatefulSetList
-	}{
-		name: "Test with valid params",
-		args: args{
-			namespace: "testns1",
-			clientset: clientset,
-		},
-		want: &appsv1.StatefulSetList{
-			Items: []appsv1.StatefulSet{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-statefulset",
-						Namespace: "testns1",
-					},
-					Spec: appsv1.StatefulSetSpec{
-						Replicas: &replicas,
-					},
-				},
-			},
-		},
-	}
-	t.Run(tests.name, func(t *testing.T) {
-		got, err := getStatefulSet(tests.args.namespace, tests.args.clientset)
-		if err != nil {
-			t.Errorf("%v", err)
-		}
-		if len(got.Items) != 1 {
-			t.Fatalf("getStatefulSet() returned wrong number of statefulsets: %d, expected: %d\n", len(got.Items), len(tests.want.Items))
-		}
-		if got.Items[0].Name != tests.want.Items[0].Name {
-			t.Errorf("getStatefulSet() returned wrong statefulset got: %s, expected: %s", got.Items[0].Name, tests.want.Items[0].Name)
-		}
-		if got.Items[0].Namespace != tests.want.Items[0].Namespace {
-			t.Errorf("getStatefulSet() returned wrong statefulset got: %s, expected: %s", got.Items[0].Namespace, tests.want.Items[0].Namespace)
-		}
-		if *got.Items[0].Spec.Replicas != *tests.want.Items[0].Spec.Replicas {
-			t.Errorf("getStatefulSet() returned wrong replica count got: %v, expected: %v", *got.Items[0].Spec.Replicas, *tests.want.Items[0].Spec.Replicas)
-		}
-	})
+// Limitation: Since retry.RetryOnConflict only works on a running Kubernetes cluster.
+// we use fake to build client we have to agument the way retryOnConflict works.
+// TODO: Come up with good way to handle this
+
+type mockRetryer struct {
+	err error
 }
 
-func TestGetStatefulSetNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		clientset kubernetes.Interface
-	}
-	tests := []struct {
-		name string
-		args args
-		want *appsv1.StatefulSetList
-	}{
-		{
-			name: "Test with invalid namespace",
-			args: args{
-				namespace: "testns",
-				clientset: clientset,
-			},
-			want: &appsv1.StatefulSetList{},
-		},
-		{
-			name: "Test with invalid clientset",
-			args: args{
-				namespace: "testns1",
-				clientset: clientset,
-			},
-			want: &appsv1.StatefulSetList{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with invalid namespace":
-				got, err := getStatefulSet(tt.args.namespace, tt.args.clientset)
-				if err != nil {
-					t.Errorf("%v", err)
-				}
-				if len(got.Items) != 0 {
-					t.Errorf("getStatefulSet() returned wrong statefulset for non-existent namespace got: %d, expected: %d\n", len(got.Items), len(tt.want.Items))
-				}
-				// case "Test with invalid clientset":
-				// 	if err != nil {
-				// 		t.Errorf("failed to delete collection")
-				// 	}
-				// 	_, err := getStatefulSet(tt.args.namespace, tt.args.clientset)
-				// 	if err == nil {
-				// 		t.Errorf("getStatefulSet() returned no error. expected error to be returned")
-				// 	}
-			}
-		})
-
-	}
-
+func (m *mockRetryer) RetryOnConflict(backoff wait.Backoff, fn func() error) error {
+	return m.err
 }
 
-func TestStoreStatefulSetByNamespacePositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespaces []string
-		clientset  kubernetes.Interface
-	}
-	expectedTestStatefulSet1List := []appsv1.StatefulSet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-statefulset",
-				Namespace: "testns1",
-			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-			},
-		},
-	}
-	expectedTestStatefulSet2List := []appsv1.StatefulSet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-statefulset",
-				Namespace: "testns2",
-			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-			},
-		},
-	}
-	expectedMap := make(map[string][]appsv1.StatefulSet)
-	expectedMap["testns1"] = expectedTestStatefulSet1List
-	expectedMap["testns2"] = expectedTestStatefulSet2List
-	tests := struct {
-		name string
-		args args
-		want map[string][]appsv1.StatefulSet
-	}{
-		name: "Test with valid params",
-		args: args{
-			namespaces: []string{"testns1", "testns2"},
-			clientset:  clientset,
-		},
-		want: expectedMap,
-	}
-	t.Run(tests.name, func(t *testing.T) {
-		got, err := storeStatefulSetsByNamespace(tests.args.namespaces, tests.args.clientset)
-		if err != nil {
-			t.Errorf("storeStatefulSetsByNamespace() returned error: %v\n", err)
-		}
-		if len(got) != len(tests.want) {
-			t.Fatalf("storeStatefulSetsByNamespace() returned empty map got: %d, expected: %d", len(got), len(tests.want))
-		}
-		if got["testns1"][0].Name != tests.want["testns1"][0].Name {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset name got: %s, expected: %s", got["testns1"][0].Name, tests.want["testns1"][0].Name)
-		}
-		if got["testns1"][0].Namespace != tests.want["testns1"][0].Namespace {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset namespace got: %s, expected: %s", got["testns1"][0].Namespace, tests.want["testns1"][0].Namespace)
-		}
-		if *got["testns1"][0].Spec.Replicas != *tests.want["testns1"][0].Spec.Replicas {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset replica count got: %d, expected: %d", got["testns1"][0].Spec.Replicas, tests.want["testns1"][0].Spec.Replicas)
-		}
-		if got["testns2"][0].Name != tests.want["testns2"][0].Name {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset name got: %s, expected: %s", got["testns2"][0].Name, tests.want["testns2"][0].Name)
-		}
-		if got["testns2"][0].Namespace != tests.want["testns2"][0].Namespace {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset namespace got: %s, expected: %s", got["testns2"][0].Namespace, tests.want["testns2"][0].Namespace)
-		}
-		if *got["testns2"][0].Spec.Replicas != *tests.want["testns2"][0].Spec.Replicas {
-			t.Errorf("storeStatefulSetsByNamespace() returned wrong statefulset replica count got: %d, expected: %d", got["testns2"][0].Spec.Replicas, tests.want["testns2"][0].Spec.Replicas)
-		}
-	})
-
-}
-
-func TestStoreStatefulSetByNamespaceNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespaces []string
-		clientset  kubernetes.Interface
-	}
-	expectedTestStatefulSet1List := []appsv1.StatefulSet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-statefulset-1",
-				Namespace: "testns1",
-			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-			},
-		},
-	}
-	expectedTestStatefulSet2List := []appsv1.StatefulSet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-statefulset-2",
-				Namespace: "testns2",
-			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-			},
-		},
-	}
-	expectedMap := make(map[string][]appsv1.StatefulSet)
-	expectedMap["testns1"] = expectedTestStatefulSet1List
-	expectedMap["testns2"] = expectedTestStatefulSet2List
-	tests := []struct {
-		name string
-		args args
-		want map[string][]appsv1.StatefulSet
-	}{
-		{
-			name: "Test with one no statefulset namespace",
-			args: args{
-				namespaces: []string{"testns1", "testns2", "testns3"},
-				clientset:  clientset,
-			},
-			want: expectedMap,
-		},
-		{
-			name: "Test with invalid namespace",
-			args: args{
-				namespaces: []string{""},
-				clientset:  clientset,
-			},
-			want: make(map[string][]appsv1.StatefulSet),
-		},
-		{
-			name: "Test with empty namespace list",
-			args: args{
-				namespaces: []string{},
-				clientset:  clientset,
-			},
-			want: make(map[string][]appsv1.StatefulSet),
-		},
-		{
-			name: "Test with no statefulset in namespace",
-			args: args{
-				namespaces: []string{"testns3"},
-				clientset:  clientset,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with one no statefulset namespace":
-				got, err := storeStatefulSetsByNamespace(tt.args.namespaces, tt.args.clientset)
-				if err != nil {
-					t.Errorf("storeStatefulSetsByNamespace() returned error: %v\n", err)
-				}
-				if len(got) > len(tt.want) {
-					t.Errorf("storeStatefulSetsByNamespace() returned empty map got: %d, expected: %d", len(got), len(tt.want))
-				}
-
-			case "Test with invalid namespace":
-				got, err := storeStatefulSetsByNamespace(tt.args.namespaces, tt.args.clientset)
-				if err == nil {
-					t.Errorf("storeStatefulSetsByNamespace() returned no error. expected error to be returned")
-				}
-				if len(got) != 0 {
-					t.Errorf("storeStatefulSetsByNamespace() returned non empty map. got: %d, expected: %d", len(got), len(tt.want))
-				}
-			case "Test with empty namespace list":
-				got, err := storeStatefulSetsByNamespace(tt.args.namespaces, tt.args.clientset)
-				if err == nil {
-					t.Errorf("storeStatefulSetsByNamespace() returned no error. expected error to be returned")
-				}
-				if len(got) != 0 {
-					t.Errorf("storeStatefulSetsByNamespace() returned non empty map. got: %d, expected: %d", len(got), len(tt.want))
-				}
-			case "Test with no statefulset in namespace":
-				got, err := storeStatefulSetsByNamespace(tt.args.namespaces, tt.args.clientset)
-				if err == nil {
-					t.Errorf("storeStatefulSetsByNamespace returned no error. expected error to be returned. got: %v", got)
-				}
-			}
-		})
-	}
-
-}
-func TestCheckStatefulSetStatusPostive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	testStatefulSet := appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-statefulset",
-			Namespace: "testns1",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "test-app",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "test-app",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "my-container",
-							Image: "nginx:latest",
-						},
-					},
-				},
-			},
-		},
-	}
-	type args struct {
-		namespace   string
-		statefulset appsv1.StatefulSet
-		clientset   kubernetes.Interface
-	}
-	tests := struct {
-		name string
-		args args
-	}{
-		name: "Test with valid parms",
-		args: args{
-			namespace:   "testns1",
-			statefulset: testStatefulSet,
-			clientset:   clientset,
-		},
-	}
-	t.Run(tests.name, func(t *testing.T) {
-		err := checkStatefulSetStatus(tests.args.namespace, tests.args.statefulset, tests.args.clientset)
-		if err != nil {
-			t.Errorf("checkStatefulSetStatus() should not return an error, got: %v", err)
-		}
-	})
-
-}
-
-func TestCheckStatefulSetStatusNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	testReplica := int32(0)
-	testStatefulSet := appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-statefulset",
-			Namespace: "testns1",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &testReplica,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "test-app",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "test-app",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "my-container",
-							Image: "nginx:latest",
-						},
-					},
-				},
-			},
-		},
-	}
-	testFaultyStatefulSet := appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-statefulset",
-			Namespace: "testns3",
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "test-app",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "test-app",
-					},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:    "my-container",
-							Image:   "nginx:latest",
-							Command: []string{"docker ps -a"},
-						},
-					},
-				},
-			},
-		},
-	}
-	type args struct {
-		namespace   string
-		statefulset appsv1.StatefulSet
-		clientset   kubernetes.Interface
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with invalid expectation",
-			args: args{
-				namespace:   "testns1",
-				statefulset: testStatefulSet,
-				clientset:   clientset,
-			},
-		},
-		{
-			name: "Test with faulty statefulset",
-			args: args{
-				namespace:   "testns3",
-				statefulset: testFaultyStatefulSet,
-				clientset:   clientset,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with invalid expectation":
-				err := checkStatefulSetStatus(tt.args.namespace, tt.args.statefulset, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkStatefulSetStatus() should return an error, got: %v", err)
-				}
-			case "Test with faulty statefulset":
-				_, err := clientset.AppsV1().StatefulSets(testFaultyStatefulSet.Namespace).Create(context.Background(), &testFaultyStatefulSet, metav1.CreateOptions{})
-				if err != nil {
-					t.Errorf("failed to create faulty statefulset %v, reason: %v", testStatefulSet.Name, err)
-				}
-				time.Sleep(15 * time.Second)
-				err = checkStatefulSetStatus(tt.args.namespace, tt.args.statefulset, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkStatefulSetStatus() should return an error, got %v", err)
-				}
-			}
-		})
-	}
-
-}
-
-func TestValidateStatefulSetsByNamespacePositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespaces              []string
-		statefulSetsByNamespace map[string][]appsv1.StatefulSet
-		clientset               kubernetes.Interface
-		interval                time.Duration
-		timeout                 time.Duration
-	}
-	actualMap := make(map[string][]appsv1.StatefulSet)
-	actualMap["testns1"] = []appsv1.StatefulSet{helper.TestStatefulSet1}
-	actualMap["testns2"] = []appsv1.StatefulSet{helper.TestStatefulSet2}
-	tests := struct {
-		name string
-		args args
-	}{
-		name: "Test with valid params",
-		args: args{
-			namespaces:              []string{"testns1", "testns2"},
-			statefulSetsByNamespace: actualMap,
-			clientset:               clientset,
-			interval:                time.Second,
-			timeout:                 time.Second,
-		},
-	}
-	t.Run(tests.name, func(t *testing.T) {
-		err := validateStatefulSetsByNamespace(tests.args.namespaces, tests.args.statefulSetsByNamespace, tests.args.clientset, tests.args.interval, tests.args.timeout)
-		if err != nil {
-			t.Errorf("validateStatefulSetsByNamespace() should not return an error. got: %v", err)
-		}
-	})
-}
-
-func TestValidateStatefulSetsByNamespaceNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	//defer TeardownTestEnvironment(t,clientset)
-	type args struct {
-		namespaces              []string
-		statefulSetsByNamespace map[string][]appsv1.StatefulSet
-		clientset               kubernetes.Interface
-		interval                time.Duration
-		timeout                 time.Duration
-	}
-	testFaultyStatefulSet := []appsv1.StatefulSet{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-statefulset",
-				Namespace: "testns3",
-			},
-			Spec: appsv1.StatefulSetSpec{
-				Replicas: &replicas,
-				Selector: &metav1.LabelSelector{
-					MatchLabels: map[string]string{
-						"app": "test-app",
-					},
-				},
-				Template: corev1.PodTemplateSpec{
-					ObjectMeta: metav1.ObjectMeta{
-						Labels: map[string]string{
-							"app": "test-app",
-						},
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:    "my-container",
-								Image:   "nginx:latest",
-								Command: []string{"docker ps -a"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	actualMap := make(map[string][]appsv1.StatefulSet)
-	actualMap["testns3"] = testFaultyStatefulSet
-	actualMap["testns1"] = []appsv1.StatefulSet{helper.TestStatefulSet1}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with empty namespace list",
-			args: args{
-				namespaces:              []string{},
-				statefulSetsByNamespace: make(map[string][]appsv1.StatefulSet),
-				clientset:               clientset,
-				interval:                1 * time.Second,
-				timeout:                 1 * time.Second,
-			},
-		},
-		{
-			name: "Test with empty statefulsets",
-			args: args{
-				namespaces:              []string{"testns1"},
-				statefulSetsByNamespace: make(map[string][]appsv1.StatefulSet),
-				clientset:               clientset,
-				interval:                1 * time.Second,
-				timeout:                 1 * time.Second,
-			},
-		},
-		{
-			name: "Test with invalid statefulset status",
-			args: args{
-				namespaces:              []string{"testns3"},
-				statefulSetsByNamespace: actualMap,
-				clientset:               clientset,
-				interval:                5 * time.Second,
-				timeout:                 5 * time.Second,
-			},
-		},
-		{
-			name: "Test with invalid timeout/interval duration",
-			args: args{
-				namespaces:              []string{"testns1"},
-				statefulSetsByNamespace: actualMap,
-				clientset:               clientset,
-				interval:                -1 * time.Minute,
-				timeout:                 0 * time.Minute,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with empty namespace list":
-				err := validateStatefulSetsByNamespace(tt.args.namespaces, tt.args.statefulSetsByNamespace, tt.args.clientset, tt.args.interval, tt.args.timeout)
-				if err == nil {
-					t.Errorf("validateStatefulSetsByNamespace() should return an error. got: %v", err)
-				}
-			case "Test with empty statefulsets":
-				err := validateStatefulSetsByNamespace(tt.args.namespaces, tt.args.statefulSetsByNamespace, tt.args.clientset, tt.args.interval, tt.args.timeout)
-				if err == nil {
-					t.Errorf("validateStatefulSetsByNamespace() should return an error. got: %v", err)
-				}
-			case "Test with invalid statefulset status":
-				err := validateStatefulSetsByNamespace(tt.args.namespaces, tt.args.statefulSetsByNamespace, tt.args.clientset, tt.args.interval, tt.args.timeout)
-				if err == nil {
-					t.Errorf("validateStatefulSetsByNamespace() should return an error. got: %v", err)
-				}
-			case "Test with invalid timeout/interval duration":
-				err := validateStatefulSetsByNamespace(tt.args.namespaces, tt.args.statefulSetsByNamespace, tt.args.clientset, tt.args.interval, tt.args.timeout)
-				if err == nil {
-					t.Errorf("validateStatefulSetsByNamespace() should return an error. got: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestCheckStatefulSetsPositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace []string
-		clientset kubernetes.Interface
-		interval  time.Duration
-		timeout   time.Duration
-	}
-	tests := struct {
-		name string
-		args args
-	}{
-		name: "Test with valid params",
-		args: args{
-			namespace: []string{"testns1", "testns2"},
-			clientset: clientset,
-			interval:  time.Second,
-			timeout:   time.Second,
-		},
-	}
-	t.Run(tests.name, func(t *testing.T) {
-		err := CheckStatefulSets(tests.args.namespace, tests.args.clientset, tests.args.timeout, tests.args.interval)
-		if err != nil {
-			t.Errorf("CheckStatefulSets() should not return an error. got: %v", err)
-		}
-	})
-}
-
-func TestCheckStatefulSetsNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace []string
-		clientset kubernetes.Interface
-		interval  time.Duration
-		timeout   time.Duration
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with empty namespace list",
-			args: args{
-				namespace: []string{},
-				clientset: clientset,
-				interval:  time.Second,
-				timeout:   time.Second,
-			},
-		},
-		{
-			name: "Test with faulty statefulset",
-			args: args{
-				namespace: []string{"testns3"},
-				clientset: clientset,
-				interval:  time.Second,
-				timeout:   time.Second,
-			},
-		},
-		{
-			name: "Test with invalid namespace list",
-			args: args{
-				namespace: []string{"faultyns"},
-				clientset: clientset,
-				interval:  time.Second,
-				timeout:   time.Second,
-			},
-		},
-		{
-			name: "Test with invalid timeout/interval",
-			args: args{
-				namespace: []string{"testns1"},
-				clientset: clientset,
-				interval:  -1 * time.Minute,
-				timeout:   0 * time.Second,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := CheckStatefulSets(tt.args.namespace, tt.args.clientset, tt.args.timeout, tt.args.interval)
-			if err == nil {
-				t.Errorf("CheckStatefulSets() should return an error. got: %v", err)
-			}
-		})
-	}
-}
-
-func TestMain(m *testing.M) {
-	cls, err := helper.SetupTestEnvironment("statefulsets")
-	clientset = cls
-
+func TestGetStatefulSet(t *testing.T) {
+	clienset := fake.NewSimpleClientset(&testSSList)
+	logger.NewLogger(logger.LevelInfo)
+	sts, err := getStatefulSet(testNS, clienset)
 	if err != nil {
-		fmt.Printf("issue while setting up environment to run the tests. reason: %v", err)
-		os.Exit(1)
+		t.Fatalf("expected nil got: %v", err)
 	}
-	exitCode := m.Run()
-	err = helper.TeardownTestEnvironment()
+	if len(sts.Items) != 1 {
+		t.Errorf("expected 1 statefulset, got: %v", len(sts.Items))
+	}
+}
+
+func TestGetStatefulSetNoStatefulSet(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	logger.NewLogger(logger.LevelInfo)
+	_, err := getStatefulSet(testNS, clientset)
+	if err != ErrNoStatefulSet {
+		t.Fatalf("expected ErrNoStatefulSet, got: %v", err)
+	}
+}
+
+func TestStoreStatefulSetsByNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testSSList)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace, err := storeStatefulSetsByNamespace(namespaces, clientset)
 	if err != nil {
-		fmt.Printf("issue while destroying the environment. reason: %v", err)
-		os.Exit(1)
+		t.Fatalf("expected nil, got: %v", err)
 	}
-	os.Exit(exitCode)
+	if len(statefulsetsByNamespace) != 1 {
+		t.Errorf("expected 1 statefulset, got: %v", len(statefulsetsByNamespace))
+	}
+}
+
+func TestStoreStatefulSetsByNamespaceNoNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testSSList)
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{}
+	_, err := storeStatefulSetsByNamespace(namespaces, clientset)
+	if err != ErrNoNamespace {
+		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	}
+}
+
+func TestStoreStatefulSetsByNamespaceNoStatefulSets(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	_, err := storeStatefulSetsByNamespace(namespaces, clientset)
+	if err != ErrNoStatefulSet {
+		t.Fatalf("expected ErrNoStatefulSet, got: %v", err)
+	}
+}
+
+func TestCheckStatefulSetStatus(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testSSList)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	err := checkStatefulSetStatus(testNS, testSSList.Items[0], clientset)
+	if err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+}
+
+func TestCheckStatefulSetStatusNotHealthy(t *testing.T) {
+	faultySS := appsv1.StatefulSetList{
+		Items: []appsv1.StatefulSet{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testStset,
+					Namespace: testNS,
+				},
+				Status: appsv1.StatefulSetStatus{
+					AvailableReplicas: 0,
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&faultySS)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: ErrStatefulSetNotHealthy}
+	logger.NewLogger(logger.LevelInfo)
+	err := checkStatefulSetStatus(testNS, faultySS.Items[0], clientset)
+	if err != ErrStatefulSetNotHealthy {
+		t.Fatalf("expected ErrStatefulSetNotHealthy, got: %v", err)
+	}
+}
+
+func TestValidateStatefulSetsByNamespace(t *testing.T) {
+	testLabels["app"] = "test-app"
+	testPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&testSSList, &testPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	statefulsetsByNamespace[testNS] = testSSList.Items
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+}
+
+func TestValidateStatefulSetsByNamespaceNoNamespace(t *testing.T) {
+	testLabels["app"] = "test-app"
+	testPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&testSSList, &testPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != ErrNamespaceEmpty {
+		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
+	}
+
+}
+
+func TestValidateStatefulSetsByNamespaceInvalidInterval(t *testing.T) {
+	testLabels["app"] = "test-app"
+	testPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&testSSList, &testPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	statefulsetsByNamespace[testNS] = testSSList.Items
+	interval := -1 * time.Second
+	timeout := -5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != ErrInvalidInterval {
+		t.Fatalf("expected ErrInvalidInterval, got: %v", err)
+	}
+}
+
+func TestValidateStatefulSetsByNamespaceNoStatefulSetByNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != ErrNoStatefulSet {
+		t.Fatalf("expected ErrNoStatefulSet, got: %v", err)
+	}
+}
+
+func TestValidateStatefulSetsByNamespaceStatefulSetFailed(t *testing.T) {
+	testLabels["app"] = "test-app"
+	faultyPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodUnknown,
+				},
+			},
+		},
+	}
+	faultySS := appsv1.StatefulSetList{
+		Items: []appsv1.StatefulSet{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testStset,
+					Namespace: testNS,
+				},
+				Spec: appsv1.StatefulSetSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: testLabels,
+					},
+				},
+				Status: appsv1.StatefulSetStatus{
+					AvailableReplicas: 0,
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset(&faultySS, &faultyPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: ErrStatefulSetNotHealthy}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	statefulsetsByNamespace[testNS] = faultySS.Items
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != ErrStatefulSetFailed {
+		t.Fatalf("expected ErrStatefulSetFailed, got: %v", err)
+	}
+}
+
+func TestValidateStatefulSetsByNamespacePodFailed(t *testing.T) {
+	testLabels["app"] = "test-app"
+	faultyPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodUnknown,
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset(&testSSList, &faultyPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
+	statefulsetsByNamespace[testNS] = testSSList.Items
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
+	if err != ErrStatefulSetFailed {
+		t.Fatalf("expected ErrStatefulSetFailed, got: %v", err)
+	}
+}
+
+func TestCheckStatefulSets(t *testing.T) {
+	testLabels["app"] = "test-app"
+	testPods := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "testPod",
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&testSSList, &testPods)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{testNS}
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := CheckStatefulSets(namespaces, clientset, interval, timeout)
+	if err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+}
+
+func TestCheckStatefulSetsNoNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testSSList)
+	// TODO: Come up with good way to write this
+	retryer = &mockRetryer{err: nil}
+	logger.NewLogger(logger.LevelInfo)
+	namespaces := []string{}
+	interval := 1 * time.Second
+	timeout := 5 * time.Second
+	err := CheckStatefulSets(namespaces, clientset, interval, timeout)
+	if err != ErrNoNamespace {
+		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	}
 }

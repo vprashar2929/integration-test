@@ -11,8 +11,8 @@ local rbacConfig = {
 local jobConfig = {
     name: 'rhobs-test-job',
     namespaces:'prometheus-example',
-    interval: '30s',
-    timeout: '1m',
+    interval: '5s',
+    timeout: '60s',
     image: 'localhost:5001/rhobs-test',
     imageTag: 'latest',
     serviceAccountName: rbacConfig.serviceAccountName

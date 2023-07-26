@@ -41,9 +41,7 @@ kind:
 .PHONY: test
 test: kind
 	kind get kubeconfig > kubeconfig
-	go test ./pkg/deployment
-	go test ./pkg/statefulset
-	go test ./pkg/pod
+	go test ./...
 	
 .PHONY: local
 local: kind container-dev

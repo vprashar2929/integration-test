@@ -1,261 +1,228 @@
 package pod
 
 import (
-	"context"
-	"fmt"
-	"io"
-	"log"
-	"os"
 	"testing"
-	"time"
 
-	helper "github.com/vprashar2929/rhobs-test/pkg/helper"
+	"github.com/vprashar2929/rhobs-test/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 var (
-	clientset *kubernetes.Clientset
+	testNS        = "test-namespace"
+	testPod       = "test-pod"
+	testContainer = "test-container"
+	testImage     = "quay.io/foo/bar:latest"
+	testLabels    = make(map[string]string)
+	testPodList   = corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testPod,
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							RestartCount: 0,
+							State: corev1.ContainerState{
+								Running: &corev1.ContainerStateRunning{
+									StartedAt: metav1.Now(),
+								},
+							},
+						},
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  testContainer,
+							Image: testImage,
+						},
+					},
+				},
+			},
+		},
+	}
 )
 
-func TestCheckPodHealthNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		labels    labels.Selector
-		clientset kubernetes.Interface
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with invalid namespace",
-			args: args{
-				namespace: "",
-				labels:    labels.SelectorFromSet(helper.TestDeployment1.Spec.Selector.MatchLabels),
-				clientset: clientset,
-			},
-		},
-		{
-			name: "Test with no pod in a namespace",
-			args: args{
-				namespace: "testns3",
-				labels:    labels.SelectorFromSet(helper.TestDeployment2.Spec.Selector.MatchLabels),
-				clientset: clientset,
-			},
-		},
-		{
-			name: "Test with faulty deployment",
-			args: args{
-				namespace: "testns3",
-				labels:    labels.SelectorFromSet(helper.TestFaultyDeployment.Spec.Selector.MatchLabels),
-				clientset: clientset,
-			},
-		},
-		{
-			name: "Test with negative deployment",
-			args: args{
-				namespace: "testns1",
-				labels:    labels.SelectorFromSet(helper.TestNegativeDeployment.Spec.Selector.MatchLabels),
-				clientset: clientset,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with invalid namespace":
-				err := checkPodHealth(tt.args.namespace, tt.args.labels, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			case "Test with no pod in a namespace":
-				err := checkPodHealth(tt.args.namespace, tt.args.labels, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			case "Test with faulty deployment":
-				_, err := clientset.AppsV1().Deployments(helper.TestFaultyDeployment.Namespace).Create(context.Background(), &helper.TestFaultyDeployment, metav1.CreateOptions{})
-				if err != nil {
-					t.Errorf("failed to create faulty deployment %v, reason: %v", helper.TestFaultyDeployment.Name, err)
-				}
-				time.Sleep(15 * time.Second)
-				err = checkPodHealth(tt.args.namespace, tt.args.labels, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			case "Test with negative deployment":
-				_, err := clientset.AppsV1().Deployments(helper.TestNegativeDeployment.Namespace).Create(context.Background(), &helper.TestNegativeDeployment, metav1.CreateOptions{})
-				if err != nil {
-					t.Errorf("failed to create negative deployment %v, reason: %v", helper.TestNegativeDeployment.Name, err)
-				}
-				time.Sleep(15 * time.Second)
-				err = checkPodHealth(tt.args.namespace, tt.args.labels, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			}
-
-		})
-	}
-}
-func TestCheckPodHealthPositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		labels    labels.Selector
-		clientset kubernetes.Interface
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with valid namespace",
-			args: args{
-				namespace: "testns1",
-				labels:    labels.SelectorFromSet(helper.TestDeployment1.Spec.Selector.MatchLabels),
-				clientset: clientset,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with valid namespace":
-				err := checkPodHealth(tt.args.namespace, tt.args.labels, tt.args.clientset)
-				if err != nil {
-					t.Errorf("checkPodHealth() should not return error. got: %v", err)
-				}
-			}
-		})
-	}
-}
-func TestCheckPodStatusNegative(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		podList   corev1.PodList
-		clientset kubernetes.Interface
-	}
-	faultyPodSpec := corev1.Pod{Spec: helper.TestFaultyDeployment.Spec.Template.Spec}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with invalid namespace",
-			args: args{
-				namespace: "",
-				podList:   corev1.PodList{},
-				clientset: clientset,
-			},
-		},
-		{
-			name: "Test with no pod in a namespace",
-			args: args{
-				namespace: "testns3",
-				podList:   corev1.PodList{Items: []corev1.Pod{}},
-				clientset: clientset,
-			},
-		},
-		{
-			name: "Test with faulty deployment",
-			args: args{
-				namespace: "testns3",
-				podList:   corev1.PodList{Items: []corev1.Pod{faultyPodSpec}},
-				clientset: clientset,
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with invalid namespace":
-				err := checkPodStatus(tt.args.namespace, tt.args.podList, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			case "Test with no pod in a namespace":
-				err := checkPodStatus(tt.args.namespace, tt.args.podList, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			case "Test with faulty deployment":
-				err := checkPodStatus(tt.args.namespace, tt.args.podList, tt.args.clientset)
-				if err == nil {
-					t.Errorf("checkPodHealth() should return error. got: %v", err)
-				}
-			}
-
-		})
-	}
-}
-func TestCheckPodStatusPositive(t *testing.T) {
-	res := testing.Verbose()
-	if !res {
-		log.SetOutput(io.Discard)
-	}
-	type args struct {
-		namespace string
-		podList   corev1.PodList
-		clientset kubernetes.Interface
-	}
-	podList, err := clientset.CoreV1().Pods(helper.TestDeployment1.Namespace).List(context.Background(), metav1.ListOptions{LabelSelector: labels.SelectorFromSet(helper.TestDeployment1.Spec.Selector.MatchLabels).String()})
+func TestCheckPodStatus(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testPodList)
+	logger.NewLogger(logger.LevelInfo)
+	err := checkPodStatus(testNS, testPodList, clientset)
 	if err != nil {
-		t.Errorf("cannot list pod's inside namespace: %s: %v", helper.TestDeployment1.Namespace, err)
+		t.Fatalf("expected nil got: %v", err)
 	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "Test with valid namespace",
-			args: args{
-				namespace: "testns1",
-				podList:   *podList,
-				clientset: clientset,
+}
+func TestCheckPodStatusNoNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testPodList)
+	logger.NewLogger(logger.LevelInfo)
+	err := checkPodStatus("", testPodList, clientset)
+	if err != ErrNoNamespace {
+		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	}
+}
+func TestCheckPodStatusNoPod(t *testing.T) {
+	podList := corev1.PodList{}
+	clientset := fake.NewSimpleClientset()
+	logger.NewLogger(logger.LevelInfo)
+	err := checkPodStatus(testNS, podList, clientset)
+	if err != ErrNoPod {
+		t.Fatalf("expected ErrNoPod, got: %v", err)
+	}
+}
+func TestCheckPodStatusNoRunningPod(t *testing.T) {
+	faultyPodList := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testPod,
+					Namespace: testNS,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  testContainer,
+							Image: testImage,
+						},
+					},
+				},
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			switch name := tt.name; name {
-			case "Test with valid namespace":
-				err := checkPodStatus(tt.args.namespace, tt.args.podList, tt.args.clientset)
-				if err != nil {
-					t.Errorf("checkPodHealth() should not return error. got: %v", err)
-				}
-			}
-
-		})
+	clientset := fake.NewSimpleClientset(&faultyPodList)
+	logger.NewLogger(logger.LevelInfo)
+	err := checkPodStatus(testNS, faultyPodList, clientset)
+	if err != ErrPodNotRunning {
+		t.Fatalf("expected ErrPodNotRunning. got: %v", err)
 	}
 }
-func TestMain(m *testing.M) {
-	cls, err := helper.SetupTestEnvironment("deployment")
-	clientset = cls
 
+func TestCheckPodHealth(t *testing.T) {
+	testLabels["app"] = "test-app"
+	logger.NewLogger(logger.LevelInfo)
+	ls := labels.SelectorFromSet(testLabels)
+	clientset := fake.NewSimpleClientset(&testPodList)
+	err := checkPodHealth(testNS, ls, clientset)
 	if err != nil {
-		fmt.Printf("issue while setting up environment to run the tests. reason: %v", err)
-		os.Exit(1)
+		t.Fatalf("expected nil, got: %v", err)
 	}
-	exitCode := m.Run()
-	err = helper.TeardownTestEnvironment()
+}
+func TestCheckPodHealthNoNamespace(t *testing.T) {
+	testLabels["app"] = "test-app"
+	logger.NewLogger(logger.LevelInfo)
+	ls := labels.SelectorFromSet(testLabels)
+	clientset := fake.NewSimpleClientset(&testPodList)
+	err := checkPodHealth("", ls, clientset)
+	if err != ErrNoNamespace {
+		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	}
+}
+
+func TestCheckPodHealthNoPod(t *testing.T) {
+	logger.NewLogger(logger.LevelInfo)
+	ls := labels.SelectorFromSet(testLabels)
+	clientset := fake.NewSimpleClientset(&testPodList)
+	err := checkPodHealth("testNS", ls, clientset)
+	if err != ErrNoPod {
+		t.Fatalf("expected ErrNoPod, got: %v", err)
+	}
+}
+func TestCheckPodHealthNoRunningPod(t *testing.T) {
+	testLabels["app"] = "test-app"
+	faultyPodList := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testPod,
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  testContainer,
+							Image: testImage,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset(&faultyPodList)
+	logger.NewLogger(logger.LevelInfo)
+	ls := labels.SelectorFromSet(testLabels)
+	err := checkPodHealth(testNS, ls, clientset)
+	if err != ErrPodNotRunning {
+		t.Fatalf("expected ErrPodNotRunning, got: %v", err)
+	}
+
+}
+func TestCheckPodHealthWithRestartingContainer(t *testing.T) {
+	faultyPodList := corev1.PodList{
+		Items: []corev1.Pod{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      testPod,
+					Namespace: testNS,
+					Labels:    testLabels,
+				},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							RestartCount: 1,
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: "CrashLoopBackOff",
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{
+									Reason: "error",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	clientset := fake.NewSimpleClientset(&faultyPodList)
+	logger.NewLogger(logger.LevelInfo)
+	ls := labels.SelectorFromSet(testLabels)
+	err := checkPodHealth(testNS, ls, clientset)
+	if err == nil {
+		t.Errorf("expected an error due to restarting container, got: %v", err)
+	}
+}
+
+func TestGetPodStatus(t *testing.T) {
+	ls := labels.SelectorFromSet(testLabels)
+	clientset := fake.NewSimpleClientset(&testPodList)
+	logger.NewLogger(logger.LevelInfo)
+	err := GetPodStatus(testNS, ls, clientset)
 	if err != nil {
-		fmt.Printf("issue while destroying the environment. reason: %v", err)
-		os.Exit(1)
+		t.Fatalf("expected nil, got: %v", err)
 	}
-	os.Exit(exitCode)
+}
+func TestGetPodStatusNoNamespace(t *testing.T) {
+	ls := labels.SelectorFromSet(testLabels)
+	clientset := fake.NewSimpleClientset(&testPodList)
+	logger.NewLogger(logger.LevelInfo)
+	err := GetPodStatus("", ls, clientset)
+	if err != ErrNoNamespace {
+		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	}
 }

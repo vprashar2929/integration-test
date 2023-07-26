@@ -2,71 +2,97 @@ package pod
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 	"strings"
 
+	"github.com/vprashar2929/rhobs-test/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 )
 
-func checkPodHealth(namespace string, labels labels.Selector, clientset kubernetes.Interface) error {
+var (
+	ErrFetchLogs     = errors.New("error cannot fetch container logs inside pod")
+	ErrNoNamespace   = errors.New("error no namespace provided")
+	ErrListingPods   = errors.New("error listing pods in namespace")
+	ErrPodNotRunning = errors.New("error pod is not running in namespace")
+	ErrNoPod         = errors.New("error cannot find pod in namespace")
+)
+
+func getPodLogs(namespace string, clientset kubernetes.Interface, pod corev1.Pod) error {
 	tailline := int64(10)
 	seconds := int64(300)
-	errCount := 0
+	for _, container := range pod.Spec.Containers {
+		logs, err := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name, SinceSeconds: &seconds, TailLines: &tailline}).Do(context.Background()).Raw()
+		if err != nil {
+			logger.AppLog.LogError("cannot fetch container: %s log's inside pod: %s error: %v\n", container.Name, pod.Name, err)
+			return ErrFetchLogs
+		}
+		for _, line := range strings.Split(string(logs), "\\n") {
+			if strings.Contains(line, "error") || strings.Contains(line, "Error") || strings.Contains(line, "Exception") || strings.Contains(line, "exception") {
+				logger.AppLog.LogError("container: %s inside pod: %s has errors in logs:", container.Name, pod.Name)
+				logger.AppLog.LogSeperator()
+				logger.AppLog.LogError("Log Line: %s", line)
+				logger.AppLog.LogSeperator()
+			} else {
+				logger.AppLog.LogDebug("container: %s inside pod: %s has no errors in logs\n", container.Name, pod.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func checkPodHealth(namespace string, labels labels.Selector, clientset kubernetes.Interface) error {
+
 	if len(namespace) <= 0 {
-		return fmt.Errorf("no namespace provided to check pod logs\n")
+		return ErrNoNamespace
 	}
 	podList, err := clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: labels.String()})
 	if err != nil {
-		return fmt.Errorf("cannot list pod's inside namespace: %s: %v\n", namespace, err)
+		logger.AppLog.LogError("cannot list pods inside namespace %s, err: %v\n", namespace, err)
+		return ErrListingPods
 	}
 	err = checkPodStatus(namespace, *podList, clientset)
 	if err != nil {
 		return err
 	}
-	log.Println("Checking for error's/exception's in pod logs")
+	logger.AppLog.LogInfo("Checking for error's/exception's in pod logs")
 	for _, pod := range podList.Items {
 		if pod.Status.Phase != "Running" {
-			return fmt.Errorf("pod: %s is not running inside namespace: %s\n", pod.Name, namespace)
-
+			logger.AppLog.LogInfo("pod: %s is not running inside namespace: %s\n", pod.Name, namespace)
+			return ErrPodNotRunning
 		}
-		for _, container := range pod.Spec.Containers {
-			logs, err := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name, SinceSeconds: &seconds, TailLines: &tailline}).Do(context.Background()).Raw()
-			if err != nil {
-				return fmt.Errorf("cannot fetch container: %s log's inside pod: %s error: %v\n", container.Name, pod.Name, err)
-			}
-			for _, line := range strings.Split(string(logs), "\\n") {
-				if strings.Contains(line, "error") || strings.Contains(line, "Error") || strings.Contains(line, "Exception") || strings.Contains(line, "exception") {
-					log.Printf("container: %s inside pod: %s has errors in logs: \n%s", container.Name, pod.Name, line)
-					errCount += 1
-				}
-			}
+		err = getPodLogs(namespace, clientset, pod)
+		if err != nil {
+			logger.AppLog.LogError("error checking pod logs in namespace %s\n", namespace)
+			return err
 		}
-
-	}
-	if errCount > 0 {
-		return fmt.Errorf("error checking the Pod Health in namespace %s\n", namespace)
 	}
 	return nil
 }
 func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernetes.Interface) error {
 	if len(namespace) <= 0 {
-		return fmt.Errorf("no namespace provided to check pod logs\n")
+		return ErrNoNamespace
 	}
 	if len(podList.Items) <= 0 {
-		return fmt.Errorf("cannot found pod inside the namespace\n")
+		return ErrNoPod
 	}
-	log.Println("Checking pod status")
+
 	for _, pod := range podList.Items {
-		log.Printf("pod name: %s", pod.Name)
+		logger.AppLog.LogDebug("pod name: %s", pod.Name)
 		if pod.Status.Phase != "Running" {
-			return fmt.Errorf("pod: %s is not running inside namespace: %s\n", pod.Name, namespace)
+			logger.AppLog.LogError("pod: %s is not running inside namespace: %s\n", pod.Name, namespace)
+			return ErrPodNotRunning
+
 		}
 		for _, container := range pod.Status.ContainerStatuses {
 			if container.RestartCount >= 1 && container.State.Waiting != nil && container.LastTerminationState.Terminated != nil {
+				err := getPodLogs(namespace, clientset, pod)
+				if err != nil {
+					return err
+				}
 				return fmt.Errorf("pod: %s has restart count: %d\ncurrent state: message: %s, reason: %s \nlast state: message: %s, reason: %s\n", container.Name, container.RestartCount, container.State.Waiting.Message, container.State.Waiting.Reason, container.LastTerminationState.Terminated.Message, container.LastTerminationState.Terminated.Reason)
 			}
 		}
@@ -74,5 +100,6 @@ func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernet
 	return nil
 }
 func GetPodStatus(namespace string, labels labels.Selector, clientset kubernetes.Interface) error {
+	logger.AppLog.LogInfo("Checking pod status")
 	return checkPodHealth(namespace, labels, clientset)
 }
