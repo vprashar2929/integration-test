@@ -5,8 +5,8 @@ BRANCH := $(strip $(shell git rev-parse --abbrev-ref HEAD))
 BUILD_DATE :=$(shell date -u +"%Y-%m-%d")
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
 EXAMPLES := examples
-OCP_MANIFESTS := ${EXAMPLES}/manifests/openshift
-DEV_MANIFESTS := ${EXAMPLES}/manifests/dev
+OCP_MANIFESTS := $(EXAMPLES)/manifests/openshift
+DEV_MANIFESTS := $(EXAMPLES)/manifests/dev
 XARGS ?= $(shell which gxargs 2>/dev/null || which xargs)
 all: build
 build: rhobs-test

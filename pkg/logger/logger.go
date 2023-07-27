@@ -35,11 +35,11 @@ var AppLog = &CustomLogger{}
 
 func NewLogger(logLevel Level) {
 	AppLog = &CustomLogger{
-		Debug:     log.New(os.Stdout, "🛠️DEBUG: ", log.Ldate|log.Ltime),
+		Debug:     log.New(os.Stdout, "🛠️ DEBUG: ", log.Ldate|log.Ltime),
 		Info:      log.New(os.Stdout, "ℹ️ INFO: ", log.Ldate|log.Ltime),
-		Warning:   log.New(os.Stdout, "⚠️ WARNING: ", log.Ldate|log.Ltime),
+		Warning:   log.New(os.Stdout, "⚠️  WARNING: ", log.Ldate|log.Ltime),
 		Error:     log.New(os.Stdout, "❗️ERROR: ", log.Ldate|log.Ltime),
-		Fatal:     log.New(os.Stdout, "💀FATAL: ", log.Ldate|log.Ltime),
+		Fatal:     log.New(os.Stdout, "💀 FATAL: ", log.Ldate|log.Ltime),
 		Separator: log.New(os.Stdout, "", 0),
 		List:      log.New(os.Stdout, "", 0),
 		Startup:   log.New(os.Stdout, "", 0),
@@ -80,6 +80,7 @@ func (c *CustomLogger) LogFatal(format string, v ...interface{}) {
 	}
 }
 func (c *CustomLogger) LogSeperator() {
+	// TODO: Implement auto line separator
 	// width, _, _ := term.GetSize(int(os.Stdout.Fd()))
 	// separator := strings.Repeat("▁", width)
 	separator := "\n---------------------------------------------------\n"
