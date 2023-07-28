@@ -127,7 +127,7 @@ func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespac
 	}
 	for _, namespace := range namespaces {
 		for _, statefulset := range statefulsetsByNamespace[namespace] {
-			err := wait.Poll(interval, timeout, func() (bool, error) {
+			err := wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
 				err := checkStatefulSetStatus(namespace, statefulset, clientset)
 				if err != nil {
 					return false, err
@@ -138,7 +138,7 @@ func validateStatefulSetsByNamespace(namespaces []string, statefulsetsByNamespac
 				logger.AppLog.LogError("error checking the statefulset %s in namespace %s reason: %v\n", statefulset.Name, namespace, err)
 				stsErrorList = append(stsErrorList, err)
 			}
-			err = wait.Poll(interval, timeout, func() (bool, error) {
+			err = wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
 				err := pod.GetPodStatus(namespace, labels.SelectorFromSet(statefulset.Spec.Selector.MatchLabels), clientset)
 				if err != nil {
 					return false, err
