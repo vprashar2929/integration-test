@@ -39,8 +39,7 @@ kind:
 	./kind-with-registry.sh
 
 .PHONY: test
-test: kind
-	kind get kubeconfig > kubeconfig
+test:
 	go test ./...
 	
 .PHONY: local

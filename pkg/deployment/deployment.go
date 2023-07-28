@@ -125,7 +125,7 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 	}
 	for _, namespace := range namespaces {
 		for _, deployment := range deploymentsByNamespace[namespace] {
-			err := wait.Poll(interval, timeout, func() (bool, error) {
+			err := wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
 				err := checkDeploymentStatus(namespace, deployment, clientset)
 				if err != nil {
 					return false, err
@@ -137,7 +137,7 @@ func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace 
 				logger.AppLog.LogError("error checking the deployment %s in namespace %s reason: %v\n", deployment.Name, namespace, err)
 				depErrList = append(depErrList, err)
 			}
-			err = wait.Poll(interval, timeout, func() (bool, error) {
+			err = wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
 				err := pod.GetPodStatus(namespace, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), clientset)
 				if err != nil {
 					return false, err

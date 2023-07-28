@@ -84,7 +84,7 @@ local deployment = d.deployment{
 };
 
 {
-  'rbac-template':{
+  'test-rbac':{
     apiVersion: 'v1',
     kind: 'List',
     items:[
@@ -101,14 +101,14 @@ local deployment = d.deployment{
       roleBinding{},
     ],
   },
-  'job-template':{
+  'test-job':{
     apiVersion: 'v1',
     kind: 'List',
     items:[
       j.job{},
     ],
   },
-  'test-deployment-template':{
+  'test-deployment':{
     apiVersion: 'v1',
     kind: 'List',
     items:[
@@ -120,7 +120,7 @@ local deployment = d.deployment{
       },
     ],
   },
-    'test-deployment-faulty-template':{
+    'test-deployment-faulty':{
     apiVersion: 'v1',
     kind: 'List',
     items:[

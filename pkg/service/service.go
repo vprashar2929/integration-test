@@ -123,7 +123,7 @@ func validateServicesByNamespace(namespaces []string, serviceByNamespace map[str
 	}
 	for _, namespace := range namespaces {
 		for _, service := range serviceByNamespace[namespace] {
-			err := wait.Poll(interval, timeout, func() (bool, error) {
+			err := wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
 				err := checkServiceStatus(namespace, service, clientset)
 				if err != nil {
 					return false, nil
