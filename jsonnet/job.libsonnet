@@ -9,7 +9,7 @@ local defaults = {
     serviceAccountName: error 'must provide service account name',
     labels:{
         'app.kubernetes.io/component': 'test',
-        'app.kubernetes.io/instance': 'rhobs-test',
+        'app.kubernetes.io/instance': 'integration-test',
         'app.kubernetes.io/name': defaults.name,
     },
 };

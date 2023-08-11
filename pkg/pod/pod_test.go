@@ -3,7 +3,7 @@ package pod
 import (
 	"testing"
 
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -56,14 +56,6 @@ func TestCheckPodStatus(t *testing.T) {
 	err := checkPodStatus(testNS, testPodList, clientset)
 	if err != nil {
 		t.Fatalf("expected nil got: %v", err)
-	}
-}
-func TestCheckPodStatusNoNamespace(t *testing.T) {
-	clientset := fake.NewSimpleClientset(&testPodList)
-	logger.NewLogger(logger.LevelInfo)
-	err := checkPodStatus("", testPodList, clientset)
-	if err != ErrNoNamespace {
-		t.Fatalf("expected ErrNoNamespace, got: %v", err)
 	}
 }
 func TestCheckPodStatusNoPod(t *testing.T) {

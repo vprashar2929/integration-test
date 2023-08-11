@@ -33,7 +33,7 @@ function(params){
         rules:[
             {
                 apiGroups: ['','apps'],
-                resources:['deployments','statefulsets','services','endpoints','pods','namespaces','pods/log'],
+                resources:['deployments','statefulsets','services','endpoints','pods','namespaces','pods/log','daemonsets','replicasets'],
                 verbs:['get','list','watch'],
             },
         ],

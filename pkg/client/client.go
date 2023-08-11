@@ -1,14 +1,14 @@
 package client
 
 import (
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/logger"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func client(kubeconfig string) *kubernetes.Clientset {
+func GetClient(kubeconfig string) *kubernetes.Clientset {
 	var (
 		config *rest.Config
 		err    error
@@ -32,7 +32,4 @@ func client(kubeconfig string) *kubernetes.Clientset {
 		logger.AppLog.LogFatal("Error creating Kubernetes clientset: %v\n", err)
 	}
 	return clientset
-}
-func GetClient(kubeconfig string) *kubernetes.Clientset {
-	return client(kubeconfig)
 }

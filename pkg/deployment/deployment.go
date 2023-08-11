@@ -2,12 +2,13 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"errors"
 
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
-	"github.com/vprashar2929/rhobs-test/pkg/pod"
+	"github.com/vprashar2929/integration-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/pod"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,147 +31,128 @@ func (r *DefaultRetryer) RetryOnConflict(backoff wait.Backoff, fn func() error) 
 	return retry.RetryOnConflict(backoff, fn)
 }
 
-var (
-	retryer Retryer = &DefaultRetryer{}
-)
+var retryer Retryer = &DefaultRetryer{}
 
 var (
-	ErrListingDeployment     = errors.New("error listing deployments in namespace")
-	ErrNoDeployment          = errors.New("error no deployments found inside namespace")
-	ErrNoNamespace           = errors.New("error no namespace provided")
-	ErrDeploymentsNotHealthy = errors.New("error deployment not in healthy state")
-	ErrNamespaceEmpty        = errors.New("error namespace list empty")
-	ErrInvalidInterval       = errors.New("error interval or timeout is invalid")
-	ErrDeploymentFailed      = errors.New("error deployment test validation failed")
+	ErrListingDeployment    = errors.New("error listing deployments in namespace")
+	ErrNoDeployment         = errors.New("no deployments found inside namespace")
+	ErrNoNamespace          = errors.New("no namespace provided")
+	ErrDeploymentUnhealthy  = errors.New("deployment not in healthy state")
+	ErrInvalidInterval      = errors.New("interval or timeout is invalid")
+	ErrDeploymentValidation = errors.New("deployment validation failed")
 )
 
 func getDeployment(namespace string, clientset kubernetes.Interface) (*appsv1.DeploymentList, error) {
-	deployment, err := clientset.AppsV1().Deployments(namespace).List(context.Background(), metav1.ListOptions{})
+	deployment, err := clientset.AppsV1().Deployments(namespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, ErrListingDeployment
 	}
-	if len(deployment.Items) <= 0 {
+	if len(deployment.Items) == 0 {
 		return nil, ErrNoDeployment
 	}
 	return deployment, nil
 }
+
 func storeDeploymentsByNamespace(namespaces []string, clientset kubernetes.Interface) (map[string][]appsv1.Deployment, error) {
-	if len(namespaces) <= 0 {
-		logger.AppLog.LogWarning("no namespace provided")
+	if len(namespaces) == 0 {
 		return nil, ErrNoNamespace
 	}
 	deploymentsByNamespace := make(map[string][]appsv1.Deployment)
 	for _, namespace := range namespaces {
-		logger.AppLog.LogInfo("Checking Deployments status inside namespace %s\n", namespace)
-		// If namespace name is invalid
-		if namespace != "" {
-			deploymentList, err := getDeployment(namespace, clientset)
-			// unable to get deployments
-			if err != nil {
-				return nil, err
-			}
-			deploymentsByNamespace[namespace] = deploymentList.Items
-		} else {
-			logger.AppLog.LogError("invalid namespace provided: %s\n", namespace)
+		if namespace == "" {
+			logger.AppLog.LogError("Invalid namespace provided.")
+			continue
 		}
-
+		deploymentList, err := getDeployment(namespace, clientset)
+		if err != nil {
+			return nil, err
+		}
+		deploymentsByNamespace[namespace] = deploymentList.Items
 	}
-	if len(deploymentsByNamespace) <= 0 {
-		logger.AppLog.LogWarning("there is no deployment in provided namespaces: %v\n", namespaces)
+
+	if len(deploymentsByNamespace) == 0 {
 		return nil, ErrNoDeployment
 	}
 	return deploymentsByNamespace, nil
 }
+
 func checkDeploymentStatus(namespace string, deployment appsv1.Deployment, clientset kubernetes.Interface) error {
-	err := retryer.RetryOnConflict(retry.DefaultRetry, func() error {
-		updatedDeployment, err := clientset.AppsV1().Deployments(namespace).Get(context.Background(), deployment.Name, metav1.GetOptions{})
+	return retryer.RetryOnConflict(retry.DefaultRetry, func() error {
+		updatedDeployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment.Name, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
+
 		if updatedDeployment.Status.UpdatedReplicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.Replicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.AvailableReplicas == *deployment.Spec.Replicas &&
 			updatedDeployment.Status.ObservedGeneration >= deployment.Generation {
-			logger.AppLog.LogInfo("deployment %s is available in namespace %s\n", deployment.Name, namespace)
 			return nil
-		} else {
-			logger.AppLog.LogWarning("deployment %s is not available in namespace %s. Checking condition\n", deployment.Name, namespace)
-			for _, condition := range updatedDeployment.Status.Conditions {
-				if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionFalse {
-					logger.AppLog.LogError("reason: %v\n", condition.Reason)
-					break
-				}
+		}
+
+		for _, condition := range updatedDeployment.Status.Conditions {
+			if condition.Type == appsv1.DeploymentAvailable && condition.Status == corev1.ConditionFalse {
+				return ErrDeploymentUnhealthy
 			}
 		}
-		logger.AppLog.LogWarning("waiting for deployment %s to be available in namespace %s\n", deployment.Name, namespace)
-		logger.AppLog.LogWarning("deployment %v is not in healthy state inside namespace %v\n", deployment.Name, namespace)
-		return ErrDeploymentsNotHealthy
+		return nil
 	})
-	return err
 }
+
 func validateDeploymentsByNamespace(namespaces []string, deploymentsByNamespace map[string][]appsv1.Deployment, clientset kubernetes.Interface, interval, timeout time.Duration) error {
-	var depErrList []error
-	var podErrList []error
-	if len(namespaces) <= 0 {
-		logger.AppLog.LogError("namespace list empty %v. no namespace provided. please provide atleast one namespace\n", namespaces)
-		return ErrNamespaceEmpty
-	}
-	if len(deploymentsByNamespace) <= 0 {
-		return ErrNoDeployment
-	}
-	if interval.Seconds() <= 0 || timeout.Seconds() <= 0 {
-		logger.AppLog.LogError("interval or timeout is invalid. please provide the valid interval or timeout duration\n")
+	var err error
+	if interval <= 0 || timeout <= 0 {
 		return ErrInvalidInterval
-		// fmt.Errorf("interval or timeout is invalid. please provide the valid interval or timeout duration\n")
 	}
 	for _, namespace := range namespaces {
 		for _, deployment := range deploymentsByNamespace[namespace] {
-			err := wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
-				err := checkDeploymentStatus(namespace, deployment, clientset)
-				if err != nil {
-					return false, err
-				}
-				return true, nil
 
-			})
-			if err != nil {
-				logger.AppLog.LogError("error checking the deployment %s in namespace %s reason: %v\n", deployment.Name, namespace, err)
-				depErrList = append(depErrList, err)
-			}
-			err = wait.PollUntilContextTimeout(context.TODO(), interval, timeout, false, func(context.Context) (bool, error) {
-				err := pod.GetPodStatus(namespace, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), clientset)
-				if err != nil {
-					return false, err
+			// check deployment status
+			deadline := time.Now().Add(timeout)
+			for time.Now().Before(deadline) {
+				if err = checkDeploymentStatus(namespace, deployment, clientset); err == nil {
+					break
 				}
-				return true, nil
-			})
-			if err != nil {
-				logger.AppLog.LogError("error checking the pod logs of deployment %s in namespace %s, reason: %v\n", deployment.Name, namespace, err)
-				podErrList = append(podErrList, err)
+				time.Sleep(interval)
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout checking deployment status for %s in namespace %s, error: %v ", deployment.Name, namespace, err)
+			}
+
+			// check pod status
+			deadline = time.Now().Add(timeout)
+			for time.Now().Before(deadline) {
+				if err = pod.GetPodStatus(namespace, labels.SelectorFromSet(deployment.Spec.Selector.MatchLabels), clientset); err == nil {
+					break
+				}
+				time.Sleep(interval)
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout checking pod status for deployment %s in namespace %s, error: %v", deployment.Name, namespace, err)
 			}
 
 		}
 	}
-	if len(depErrList) != 0 || len(podErrList) != 0 {
-		logger.AppLog.LogError("to many errors. deployment validation test's failed\n")
-		return ErrDeploymentFailed
-	}
+
 	return nil
 }
-func CheckDeployments(namespace []string, clientset kubernetes.Interface, interval, timeout time.Duration) error {
+
+func CheckDeployments(namespaces []string, clientset kubernetes.Interface, interval, timeout time.Duration) error {
 	logger.AppLog.LogInfo("Begin Deployment validation")
-	deploymentsByNamespace, err := storeDeploymentsByNamespace(namespace, clientset)
+
+	deploymentsByNamespace, err := storeDeploymentsByNamespace(namespaces, clientset)
 	if err != nil {
 		if errors.Is(err, ErrNoDeployment) {
-			logger.AppLog.LogWarning("no deployment found in namespace, skipping deployment validations\n")
+			logger.AppLog.LogWarning("No deployments found. Skipping validations.")
 			return nil
 		}
 		return err
 	}
-	err = validateDeploymentsByNamespace(namespace, deploymentsByNamespace, clientset, interval, timeout)
-	if err != nil {
+
+	if err := validateDeploymentsByNamespace(namespaces, deploymentsByNamespace, clientset, interval, timeout); err != nil {
 		return err
 	}
+
 	logger.AppLog.LogInfo("End Deployment validation")
 	return nil
 }

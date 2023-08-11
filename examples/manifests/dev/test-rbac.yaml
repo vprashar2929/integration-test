@@ -5,14 +5,14 @@ items:
   metadata:
     labels:
       app.kubernetes.io/component: observability
-    name: rhobs-test-job
+    name: integration-test-job
     namespace: default
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: Role
   metadata:
     labels:
       app.kubernetes.io/component: observability
-    name: rhobs-test
+    name: integration-test
     namespace: default
   rules:
   - apiGroups:
@@ -26,6 +26,8 @@ items:
     - pods
     - namespaces
     - pods/log
+    - daemonsets
+    - replicasets
     verbs:
     - get
     - list
@@ -35,22 +37,22 @@ items:
   metadata:
     labels:
       app.kubernetes.io/component: observability
-    name: rhobs-test
+    name: integration-test
     namespace: default
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: Role
-    name: rhobs-test
+    name: integration-test
   subjects:
   - kind: ServiceAccount
-    name: rhobs-test-job
+    name: integration-test-job
     namespace: default
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: Role
   metadata:
     labels:
       app.kubernetes.io/component: observability
-    name: rhobs-test
+    name: integration-test
     namespace: prometheus-example
   rules:
   - apiGroups:
@@ -64,6 +66,8 @@ items:
     - pods
     - namespaces
     - pods/log
+    - daemonsets
+    - replicasets
     verbs:
     - get
     - list
@@ -73,14 +77,14 @@ items:
   metadata:
     labels:
       app.kubernetes.io/component: observability
-    name: rhobs-test
+    name: integration-test
     namespace: prometheus-example
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: Role
-    name: rhobs-test
+    name: integration-test
   subjects:
   - kind: ServiceAccount
-    name: rhobs-test-job
+    name: integration-test-job
     namespace: default
 kind: List

@@ -1,4 +1,4 @@
-package deployment
+package replicaset
 
 import (
 	"testing"
@@ -13,17 +13,17 @@ import (
 )
 
 var (
-	testNS      = "test-namespace"
-	testDep     = "test-deployment"
-	testLabels  = make(map[string]string)
-	testDepList = appsv1.DeploymentList{
-		Items: []appsv1.Deployment{
+	testNS             = "test-namespace"
+	testReplicaSet     = "test-replicaset"
+	testLabels         = make(map[string]string)
+	testReplicaSetList = appsv1.ReplicaSetList{
+		Items: []appsv1.ReplicaSet{
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      testDep,
+					Name:      testReplicaSet,
 					Namespace: testNS,
 				},
-				Spec: appsv1.DeploymentSpec{
+				Spec: appsv1.ReplicaSetSpec{
 					Selector: &metav1.LabelSelector{
 						MatchLabels: testLabels,
 					},
@@ -45,95 +45,95 @@ func (m *mockRetryer) RetryOnConflict(backoff wait.Backoff, fn func() error) err
 	return m.err
 }
 
-func TestGetDeployment(t *testing.T) {
-	clienset := fake.NewSimpleClientset(&testDepList)
+func TestGetReplicaSet(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testReplicaSetList)
 	logger.NewLogger(logger.LevelInfo)
-	dep, err := getDeployment(testNS, clienset)
+	rset, err := getReplicaSet(testNS, clientset)
 	if err != nil {
 		t.Fatalf("expected nil got: %v", err)
 	}
-	if len(dep.Items) != 1 {
-		t.Errorf("expected 1 deployment, got: %v", len(dep.Items))
+	if len(rset.Items) != 1 {
+		t.Errorf("expected 1 replicaset, got: %v", len(rset.Items))
 	}
 }
 
-func TestGetDeploymentNoDeployment(t *testing.T) {
+func TestGetReplicaSetNoReplicaSet(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	logger.NewLogger(logger.LevelInfo)
-	_, err := getDeployment(testNS, clientset)
-	if err != ErrNoDeployment {
-		t.Fatalf("expected ErrNoDeployment, got: %v", err)
+	_, err := getReplicaSet(testNS, clientset)
+	if err != ErrNoReplicaSet {
+		t.Fatalf("expected ErrNoReplicaSet, got: %v", err)
 	}
 }
 
-func TestStoreDeploymentsByNamespace(t *testing.T) {
-	clientset := fake.NewSimpleClientset(&testDepList)
+func TestStoreReplicaSetsByNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testReplicaSetList)
 	namespaces := []string{testNS}
-	deploymentsByNamespace, err := storeDeploymentsByNamespace(namespaces, clientset)
+	replicasetsByNamespace, err := storeReplicaSetsByNamespace(namespaces, clientset)
 	if err != nil {
 		t.Fatalf("expected nil, got: %v", err)
 	}
-	if len(deploymentsByNamespace) != 1 {
-		t.Errorf("expected 1 deployment, got: %v", len(deploymentsByNamespace))
+	if len(replicasetsByNamespace) != 1 {
+		t.Errorf("expected 1 replicaset, got: %v", len(replicasetsByNamespace))
 	}
 }
 
-func TestStoreDeploymentsByNamespaceNoNamespace(t *testing.T) {
-	clientset := fake.NewSimpleClientset(&testDepList)
+func TestStoreReplicaSetsByNamespaceNoNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testReplicaSetList)
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{}
-	_, err := storeDeploymentsByNamespace(namespaces, clientset)
-	if err != ErrNoNamespace {
-		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	_, err := storeReplicaSetsByNamespace(namespaces, clientset)
+	if err != ErrNamespaceEmpty {
+		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
 	}
 }
 
-func TestStoreDeploymentsByNamespaceNoDeployments(t *testing.T) {
+func TestStoreReplicaSetsByNamespaceNoReplicaSets(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
-	_, err := storeDeploymentsByNamespace(namespaces, clientset)
-	if err != ErrNoDeployment {
-		t.Fatalf("expected ErrNoDeployment, got: %v", err)
+	_, err := storeReplicaSetsByNamespace(namespaces, clientset)
+	if err != ErrNoReplicaSet {
+		t.Fatalf("expected ErrNoReplicaSet, got: %v", err)
 	}
 }
 
-func TestCheckDeploymentStatus(t *testing.T) {
-	clientset := fake.NewSimpleClientset(&testDepList)
+func TestCheckReplicaSetStatus(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testReplicaSetList)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
-	err := checkDeploymentStatus(testNS, testDepList.Items[0], clientset)
+	err := checkReplicaSetsStatus(testNS, testReplicaSetList.Items[0], clientset)
 	if err != nil {
 		t.Fatalf("expected nil, got: %v", err)
 	}
 }
 
-func TestCheckDeploymentStatusNotHealthy(t *testing.T) {
-	faultyDep := appsv1.DeploymentList{
-		Items: []appsv1.Deployment{
+func TestCheckReplicaSetStatusNotHealthy(t *testing.T) {
+	faultyRS := appsv1.ReplicaSetList{
+		Items: []appsv1.ReplicaSet{
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      testDep,
+					Name:      testReplicaSet,
 					Namespace: testNS,
 				},
-				Status: appsv1.DeploymentStatus{
+				Status: appsv1.ReplicaSetStatus{
 					AvailableReplicas: 0,
 				},
 			},
 		},
 	}
-	clientset := fake.NewSimpleClientset(&faultyDep)
+	clientset := fake.NewSimpleClientset(&faultyRS)
 	// TODO: Come up with good way to write this
-	retryer = &mockRetryer{err: ErrDeploymentUnhealthy}
+	retryer = &mockRetryer{err: ErrReplicaSetNotHealthy}
 	logger.NewLogger(logger.LevelInfo)
-	err := checkDeploymentStatus(testNS, faultyDep.Items[0], clientset)
-	if err != ErrDeploymentUnhealthy {
-		t.Fatalf("expected ErrDeploymentUnhealthy, got: %v", err)
+	err := checkReplicaSetsStatus(testNS, faultyRS.Items[0], clientset)
+	if err != ErrReplicaSetNotHealthy {
+		t.Fatalf("expected ErrReplicaSetNotHealthy, got: %v", err)
 	}
 }
 
-func TestValidateDeploymentsByNamespace(t *testing.T) {
+func TestValidateReplicaSetsByNamespace(t *testing.T) {
 	testLabels["app"] = "test-app"
 	testPods := corev1.PodList{
 		Items: []corev1.Pod{
@@ -149,22 +149,22 @@ func TestValidateDeploymentsByNamespace(t *testing.T) {
 			},
 		},
 	}
-	clientset := fake.NewSimpleClientset(&testDepList, &testPods)
+	clientset := fake.NewSimpleClientset(&testReplicaSetList, &testPods)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
-	deploymentsByNamepace := make(map[string][]appsv1.Deployment)
-	deploymentsByNamepace[testNS] = testDepList.Items
+	replicasetsByNamespace := make(map[string][]appsv1.ReplicaSet)
+	replicasetsByNamespace[testNS] = testReplicaSetList.Items
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
-	err := validateDeploymentsByNamespace(namespaces, deploymentsByNamepace, clientset, interval, timeout)
+	err := validateReplicaSetsByNamespace(namespaces, replicasetsByNamespace, clientset, interval, timeout)
 	if err != nil {
 		t.Fatalf("expected nil, got: %v", err)
 	}
 }
 
-func TestValidateDeploymentsByNamespaceInvalidInterval(t *testing.T) {
+func TestValidateReplicaSetsByNamespaceInvalidInterval(t *testing.T) {
 	testLabels["app"] = "test-app"
 	testPods := corev1.PodList{
 		Items: []corev1.Pod{
@@ -180,22 +180,22 @@ func TestValidateDeploymentsByNamespaceInvalidInterval(t *testing.T) {
 			},
 		},
 	}
-	clientset := fake.NewSimpleClientset(&testDepList, &testPods)
+	clientset := fake.NewSimpleClientset(&testReplicaSetList, &testPods)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
-	deploymentsByNamepace := make(map[string][]appsv1.Deployment)
-	deploymentsByNamepace[testNS] = testDepList.Items
+	replicasetsByNamespace := make(map[string][]appsv1.ReplicaSet)
+	replicasetsByNamespace[testNS] = testReplicaSetList.Items
 	interval := -1 * time.Second
 	timeout := -5 * time.Second
-	err := validateDeploymentsByNamespace(namespaces, deploymentsByNamepace, clientset, interval, timeout)
+	err := validateReplicaSetsByNamespace(namespaces, replicasetsByNamespace, clientset, interval, timeout)
 	if err != ErrInvalidInterval {
 		t.Fatalf("expected ErrInvalidInterval, got: %v", err)
 	}
 }
 
-func TestValidateDeploymentsByNamespaceDeploymentFailed(t *testing.T) {
+func TestValidateReplicaSetsByNamespaceReplicaSetFailed(t *testing.T) {
 	testLabels["app"] = "test-app"
 	faultyPods := corev1.PodList{
 		Items: []corev1.Pod{
@@ -211,41 +211,41 @@ func TestValidateDeploymentsByNamespaceDeploymentFailed(t *testing.T) {
 			},
 		},
 	}
-	faultyDep := appsv1.DeploymentList{
-		Items: []appsv1.Deployment{
+	faultyRS := appsv1.ReplicaSetList{
+		Items: []appsv1.ReplicaSet{
 			{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      testDep,
+					Name:      testReplicaSet,
 					Namespace: testNS,
 				},
-				Spec: appsv1.DeploymentSpec{
+				Spec: appsv1.ReplicaSetSpec{
 					Selector: &metav1.LabelSelector{
 						MatchLabels: testLabels,
 					},
 				},
-				Status: appsv1.DeploymentStatus{
+				Status: appsv1.ReplicaSetStatus{
 					AvailableReplicas: 0,
 				},
 			},
 		},
 	}
 
-	clientset := fake.NewSimpleClientset(&faultyDep, &faultyPods)
+	clientset := fake.NewSimpleClientset(&faultyRS, &faultyPods)
 	// TODO: Come up with good way to write this
-	retryer = &mockRetryer{err: ErrDeploymentUnhealthy}
+	retryer = &mockRetryer{err: ErrReplicaSetNotHealthy}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
-	deploymentsByNamepace := make(map[string][]appsv1.Deployment)
-	deploymentsByNamepace[testNS] = faultyDep.Items
+	replicasetsByNamespace := make(map[string][]appsv1.ReplicaSet)
+	replicasetsByNamespace[testNS] = faultyRS.Items
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
-	err := validateDeploymentsByNamespace(namespaces, deploymentsByNamepace, clientset, interval, timeout)
+	err := validateReplicaSetsByNamespace(namespaces, replicasetsByNamespace, clientset, interval, timeout)
 	if err == nil {
 		t.Fatalf("expected error, got: %v", err)
 	}
 }
 
-func TestValidateDeploymentsByNamespacePodFailed(t *testing.T) {
+func TestValidateReplicaSetsByNamespacePodFailed(t *testing.T) {
 	testLabels["app"] = "test-app"
 	faultyPods := corev1.PodList{
 		Items: []corev1.Pod{
@@ -262,22 +262,22 @@ func TestValidateDeploymentsByNamespacePodFailed(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset(&testDepList, &faultyPods)
+	clientset := fake.NewSimpleClientset(&testReplicaSetList, &faultyPods)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
-	deploymentsByNamepace := make(map[string][]appsv1.Deployment)
-	deploymentsByNamepace[testNS] = testDepList.Items
+	replicasetsByNamespace := make(map[string][]appsv1.ReplicaSet)
+	replicasetsByNamespace[testNS] = testReplicaSetList.Items
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
-	err := validateDeploymentsByNamespace(namespaces, deploymentsByNamepace, clientset, interval, timeout)
+	err := validateReplicaSetsByNamespace(namespaces, replicasetsByNamespace, clientset, interval, timeout)
 	if err == nil {
 		t.Fatalf("expected error, got: %v", err)
 	}
 }
 
-func TestCheckDeployments(t *testing.T) {
+func TestCheckReplicaSets(t *testing.T) {
 	testLabels["app"] = "test-app"
 	testPods := corev1.PodList{
 		Items: []corev1.Pod{
@@ -293,29 +293,29 @@ func TestCheckDeployments(t *testing.T) {
 			},
 		},
 	}
-	clientset := fake.NewSimpleClientset(&testDepList, &testPods)
+	clientset := fake.NewSimpleClientset(&testReplicaSetList, &testPods)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
-	err := CheckDeployments(namespaces, clientset, interval, timeout)
+	err := CheckReplicaSets(namespaces, clientset, interval, timeout)
 	if err != nil {
 		t.Fatalf("expected nil, got: %v", err)
 	}
 }
 
-func TestCheckDeploymentsNoNamespace(t *testing.T) {
-	clientset := fake.NewSimpleClientset(&testDepList)
+func TestCheckReplicaSetsNoNamespace(t *testing.T) {
+	clientset := fake.NewSimpleClientset(&testReplicaSetList)
 	// TODO: Come up with good way to write this
 	retryer = &mockRetryer{err: nil}
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{}
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
-	err := CheckDeployments(namespaces, clientset, interval, timeout)
-	if err != ErrNoNamespace {
-		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	err := CheckReplicaSets(namespaces, clientset, interval, timeout)
+	if err != ErrNamespaceEmpty {
+		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
 	}
 }

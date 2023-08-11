@@ -1,4 +1,4 @@
-module github.com/vprashar2929/rhobs-test
+module github.com/vprashar2929/integration-test
 
 go 1.19
 

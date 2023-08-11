@@ -87,7 +87,7 @@ func (c *CustomLogger) LogSeperator() {
 	c.Separator.Printf(separator)
 }
 func (c *CustomLogger) LogStartup(cfgs ...interface{}) {
-	c.Startup.Printf("🧪 RHOBS Integration-Test's\n")
+	c.Startup.Printf("🧪 Integration-Test's\n")
 	c.Startup.Printf("📇 Namespaces: %v", cfgs[0])
 	if cfgs[1] != nil {
 		c.Startup.Printf("👷‍♂️ Client established: True")
