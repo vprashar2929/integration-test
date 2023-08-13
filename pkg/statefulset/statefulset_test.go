@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/logger"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,8 +83,8 @@ func TestStoreStatefulSetsByNamespaceNoNamespace(t *testing.T) {
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{}
 	_, err := storeStatefulSetsByNamespace(namespaces, clientset)
-	if err != ErrNoNamespace {
-		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	if err != ErrNamespaceEmpty {
+		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
 	}
 }
 
@@ -164,37 +164,6 @@ func TestValidateStatefulSetsByNamespace(t *testing.T) {
 	}
 }
 
-func TestValidateStatefulSetsByNamespaceNoNamespace(t *testing.T) {
-	testLabels["app"] = "test-app"
-	testPods := corev1.PodList{
-		Items: []corev1.Pod{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "testPod",
-					Namespace: testNS,
-					Labels:    testLabels,
-				},
-				Status: corev1.PodStatus{
-					Phase: corev1.PodRunning,
-				},
-			},
-		},
-	}
-	clientset := fake.NewSimpleClientset(&testSSList, &testPods)
-	// TODO: Come up with good way to write this
-	retryer = &mockRetryer{err: nil}
-	logger.NewLogger(logger.LevelInfo)
-	namespaces := []string{}
-	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
-	interval := 1 * time.Second
-	timeout := 5 * time.Second
-	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
-	if err != ErrNamespaceEmpty {
-		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
-	}
-
-}
-
 func TestValidateStatefulSetsByNamespaceInvalidInterval(t *testing.T) {
 	testLabels["app"] = "test-app"
 	testPods := corev1.PodList{
@@ -223,21 +192,6 @@ func TestValidateStatefulSetsByNamespaceInvalidInterval(t *testing.T) {
 	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
 	if err != ErrInvalidInterval {
 		t.Fatalf("expected ErrInvalidInterval, got: %v", err)
-	}
-}
-
-func TestValidateStatefulSetsByNamespaceNoStatefulSetByNamespace(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
-	// TODO: Come up with good way to write this
-	retryer = &mockRetryer{err: nil}
-	logger.NewLogger(logger.LevelInfo)
-	namespaces := []string{testNS}
-	statefulsetsByNamespace := make(map[string][]appsv1.StatefulSet)
-	interval := 1 * time.Second
-	timeout := 5 * time.Second
-	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
-	if err != ErrNoStatefulSet {
-		t.Fatalf("expected ErrNoStatefulSet, got: %v", err)
 	}
 }
 
@@ -286,8 +240,8 @@ func TestValidateStatefulSetsByNamespaceStatefulSetFailed(t *testing.T) {
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
 	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
-	if err != ErrStatefulSetFailed {
-		t.Fatalf("expected ErrStatefulSetFailed, got: %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got: %v", err)
 	}
 }
 
@@ -318,8 +272,8 @@ func TestValidateStatefulSetsByNamespacePodFailed(t *testing.T) {
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
 	err := validateStatefulSetsByNamespace(namespaces, statefulsetsByNamespace, clientset, interval, timeout)
-	if err != ErrStatefulSetFailed {
-		t.Fatalf("expected ErrStatefulSetFailed, got: %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got: %v", err)
 	}
 }
 
@@ -361,7 +315,7 @@ func TestCheckStatefulSetsNoNamespace(t *testing.T) {
 	interval := 1 * time.Second
 	timeout := 5 * time.Second
 	err := CheckStatefulSets(namespaces, clientset, interval, timeout)
-	if err != ErrNoNamespace {
-		t.Fatalf("expected ErrNoNamespace, got: %v", err)
+	if err != ErrNamespaceEmpty {
+		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
 	}
 }

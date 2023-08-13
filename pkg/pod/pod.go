@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -24,6 +24,8 @@ var (
 func getPodLogs(namespace string, clientset kubernetes.Interface, pod corev1.Pod) error {
 	tailline := int64(10)
 	seconds := int64(300)
+	errorKeywords := []string{"error", "Error", "Exception", "exception"}
+
 	for _, container := range pod.Spec.Containers {
 		logs, err := clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name, SinceSeconds: &seconds, TailLines: &tailline}).Do(context.Background()).Raw()
 		if err != nil {
@@ -31,7 +33,14 @@ func getPodLogs(namespace string, clientset kubernetes.Interface, pod corev1.Pod
 			return ErrFetchLogs
 		}
 		for _, line := range strings.Split(string(logs), "\\n") {
-			if strings.Contains(line, "error") || strings.Contains(line, "Error") || strings.Contains(line, "Exception") || strings.Contains(line, "exception") {
+			hasError := false
+			for _, keyword := range errorKeywords {
+				if strings.Contains(line, keyword) {
+					hasError = true
+					break
+				}
+			}
+			if hasError {
 				logger.AppLog.LogError("container: %s inside pod: %s has errors in logs:", container.Name, pod.Name)
 				logger.AppLog.LogSeperator()
 				logger.AppLog.LogError("Log Line: %s", line)
@@ -46,7 +55,7 @@ func getPodLogs(namespace string, clientset kubernetes.Interface, pod corev1.Pod
 
 func checkPodHealth(namespace string, labels labels.Selector, clientset kubernetes.Interface) error {
 
-	if len(namespace) <= 0 {
+	if len(namespace) == 0 {
 		return ErrNoNamespace
 	}
 	podList, err := clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{LabelSelector: labels.String()})
@@ -60,12 +69,7 @@ func checkPodHealth(namespace string, labels labels.Selector, clientset kubernet
 	}
 	logger.AppLog.LogInfo("Checking for error's/exception's in pod logs")
 	for _, pod := range podList.Items {
-		if pod.Status.Phase != "Running" {
-			logger.AppLog.LogInfo("pod: %s is not running inside namespace: %s\n", pod.Name, namespace)
-			return ErrPodNotRunning
-		}
-		err = getPodLogs(namespace, clientset, pod)
-		if err != nil {
+		if err = getPodLogs(namespace, clientset, pod); err != nil {
 			logger.AppLog.LogError("error checking pod logs in namespace %s\n", namespace)
 			return err
 		}
@@ -73,10 +77,8 @@ func checkPodHealth(namespace string, labels labels.Selector, clientset kubernet
 	return nil
 }
 func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernetes.Interface) error {
-	if len(namespace) <= 0 {
-		return ErrNoNamespace
-	}
-	if len(podList.Items) <= 0 {
+
+	if len(podList.Items) == 0 {
 		return ErrNoPod
 	}
 
@@ -93,7 +95,11 @@ func checkPodStatus(namespace string, podList corev1.PodList, clientset kubernet
 				if err != nil {
 					return err
 				}
-				return fmt.Errorf("pod: %s has restart count: %d\ncurrent state: message: %s, reason: %s \nlast state: message: %s, reason: %s\n", container.Name, container.RestartCount, container.State.Waiting.Message, container.State.Waiting.Reason, container.LastTerminationState.Terminated.Message, container.LastTerminationState.Terminated.Reason)
+				return fmt.Errorf(
+					"pod: %s has restart count: %d \ncurrent state: message: %s , reason: %s \nlast state: message: %s, reason: %v",
+					container.Name, container.RestartCount, container.State.Waiting.Message, container.State.Waiting.Reason,
+					container.LastTerminationState.Terminated, container.LastTerminationState.Terminated.Reason,
+				)
 			}
 		}
 	}

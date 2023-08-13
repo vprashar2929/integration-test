@@ -17,7 +17,7 @@ The tool aims to provide a simple and easy-to-use way for defining such cluster 
 ![integration-test-design](integration-test.png)
 ## Usage
 ```
-Usage of ./rhobs-test:
+Usage of ./integration-test:
   -interval duration
     	Wait before retry status check again (default 1m0s)
   -kubeconfig string

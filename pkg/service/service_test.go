@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/logger"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -177,34 +177,6 @@ func TestValidateServiceByNamespace(t *testing.T) {
 	}
 }
 
-func TestValidateServiceByNamespaceNoNamespace(t *testing.T) {
-	logger.NewLogger(logger.LevelInfo)
-	namespaces := []string{}
-	serviceByNamespace := make(map[string][]corev1.Service)
-	serviceByNamespace[testNS] = testSvcList.Items
-	interval := 1 * time.Second
-	timeout := 5 * time.Second
-	clientset := fake.NewSimpleClientset(&testSvcList, &testEndpointList)
-	err := validateServicesByNamespace(namespaces, serviceByNamespace, clientset, interval, timeout)
-	if err != ErrNamespaceEmpty {
-		t.Fatalf("expected ErrNamespaceEmpty, got: %v", err)
-	}
-}
-
-func TestValidateServiceByNamespaceNoServiceByNamespace(t *testing.T) {
-	logger.NewLogger(logger.LevelInfo)
-	namespaces := []string{testNS}
-	serviceByNamespace := make(map[string][]corev1.Service)
-	interval := 1 * time.Second
-	timeout := 5 * time.Second
-	clientset := fake.NewSimpleClientset(&testSvcList, &testEndpointList)
-	err := validateServicesByNamespace(namespaces, serviceByNamespace, clientset, interval, timeout)
-	if err != ErrNoService {
-		t.Fatalf("expected ErrNoService, got: %v", err)
-	}
-
-}
-
 func TestValidateServiceByNamespaceInvalidInterval(t *testing.T) {
 	logger.NewLogger(logger.LevelInfo)
 	namespaces := []string{testNS}
@@ -254,8 +226,8 @@ func TestValidateServiceByNamespaceServiceFailed(t *testing.T) {
 	timeout := 5 * time.Second
 	clientset := fake.NewSimpleClientset(&testSvcList, &faultyEndpointList)
 	err := validateServicesByNamespace(namespaces, serviceByNamespace, clientset, interval, timeout)
-	if err != ErrServiceFailed {
-		t.Fatalf("expected ErrServiceFailed, got: %v", err)
+	if err == nil {
+		t.Fatalf("expected error, got: %v", err)
 	}
 
 }

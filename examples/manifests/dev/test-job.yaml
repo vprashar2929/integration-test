@@ -5,28 +5,28 @@ items:
   metadata:
     labels:
       app.kubernetes.io/component: test
-      app.kubernetes.io/instance: rhobs-test
-      app.kubernetes.io/name: rhobs-test-job
-    name: rhobs-test-job
+      app.kubernetes.io/instance: integration-test
+      app.kubernetes.io/name: integration-test-job
+    name: integration-test-job
   spec:
     template:
       metadata:
         labels:
           app.kubernetes.io/component: test
-          app.kubernetes.io/instance: rhobs-test
-          app.kubernetes.io/name: rhobs-test-job
+          app.kubernetes.io/instance: integration-test
+          app.kubernetes.io/name: integration-test-job
       spec:
         containers:
         - args:
           - --namespaces=prometheus-example
           - --interval=5s
           - --timeout=60s
-          image: localhost:5001/rhobs-test:latest
-          name: rhobs-test-job
+          image: localhost:5001/integration-test:latest
+          name: integration-test-job
           resources: {}
           volumeMounts: []
         initContainers: []
         restartPolicy: OnFailure
-        serviceAccountName: rhobs-test-job
+        serviceAccountName: integration-test-job
         volumes: []
 kind: List

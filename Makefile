@@ -1,19 +1,21 @@
 include .bingo/Variables.mk
 
-DOCKER_REPO ?= quay.io/rh_ee_vprashar/rhobs-test
+IMG_REPO ?= quay.io/rh_ee_vprashar/integration-test
 BRANCH := $(strip $(shell git rev-parse --abbrev-ref HEAD))
 BUILD_DATE :=$(shell date -u +"%Y-%m-%d")
 VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
 EXAMPLES := examples
-OCP_MANIFESTS := $(EXAMPLES)/manifests/openshift
 DEV_MANIFESTS := $(EXAMPLES)/manifests/dev
 XARGS ?= $(shell which gxargs 2>/dev/null || which xargs)
+ # Setting GOENV
+ GOOS := $(shell go env GOOS)
+ GOARCH := $(shell go env GOARCH)
 all: build
-build: rhobs-test
+build: integration-test
 
-.PHONY: rhobs-test
-rhobs-test:
-	CGO_ENABLED=0 go build ./cmd/rhobs-test
+.PHONY: integration-test
+integration-test:
+	CGO_ENABLED=0 go build ./cmd/integration-test
 
 .PHONY: vendor
 vendor: go.mod go.sum
@@ -27,10 +29,10 @@ go-fmt:
 container-dev: kind
 	@docker build \
 		--build-arg DOCKERFILE_PATH="/Dockerfile" \
-		-t $(DOCKER_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(IMG_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
 		.
-	docker tag $(DOCKER_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) localhost:5001/rhobs-test:latest
-	docker push localhost:5001/rhobs-test:latest
+	docker tag $(IMG_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) localhost:5001/integration-test:latest
+	docker push localhost:5001/integration-test:latest
 
 .PHONY: kind
 kind:
@@ -44,64 +46,44 @@ test:
 	
 .PHONY: local
 local: kind container-dev
-	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-template.yaml
-	kubectl apply -f $(DEV_MANIFESTS)/rbac-template.yaml
-	kubectl apply -f $(DEV_MANIFESTS)/job-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-deployment.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-rbac.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-job.yaml
 
 .PHONY: local-faulty
 local-faulty: kind container-dev
-	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-faulty-template.yaml
-	kubectl apply -f $(DEV_MANIFESTS)/rbac-template.yaml
-	kubectl apply -f $(DEV_MANIFESTS)/job-template.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-deployment-faulty.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-rbac.yaml
+	kubectl apply -f $(DEV_MANIFESTS)/test-job.yaml
 
 .PHONY: clean
 clean:
 	find $(EXAMPLES) -type f ! -name '*.yaml' -delete
-	find $(OCP_MANIFESTS) -type f ! -name '*.yaml' -delete
 	find $(DEV_MANIFESTS) -type f ! -name '*.yaml' -delete
 
 .PHONY: clean-local
 clean-local:
 	rm -f kind-with-registry.sh
-	rm -f ./rhobs-test
+	rm -f ./integration-test
 	kind delete cluster
 	docker ps -a -q | xargs docker rm -f
-
-.PHONY: clean-test
-clean-test:
-	rm -f kind-with-registry.sh
-	rm -f ./rhobs-test
-	kind delete cluster
-	docker ps -a -q | xargs docker rm -f
-	rm -f kubeconfig
 
 .PHONY: container-build
 container-build:
-	git update-index --refresh
-	docker buildx build \
-		--platform linux/amd64,linux/arm64 \
-		--build-arg DOCKERFILE_PATH="/Dockerfile" \
-		-t $(DOCKER_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
-		-t $(DOCKER_REPO):latest \
+	docker build \
+		--platform linux/$(GOARCH) \
+		-t $(IMG_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(IMG_REPO):latest \
 		.
 .PHONY: container-build-push
-container-build-push:
-	git update-index --refresh
-	@docker buildx build \
-		--push \
-		--platform linux/amd64,linux/arm64 \
-		-t $(DOCKER_REPO):$(BRANCH)-$(BUILD_DATE)-$(VERSION) \
-		-t $(DOCKER_REPO):latest \
-		.
-rbac-template: $(JSONNET) $(JSONNETFMT) $(GOJSONTOYAML)
-	echo "Running rbac template"
-	$(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i jsonnet/ocp-manifests.jsonnet
-	$(JSONNET) -m $(OCP_MANIFESTS) jsonnet/ocp-manifests.jsonnet | $(XARGS) -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
-	make clean
+container-build-push: container-build
+	@docker push $(IMG_REPO):latest
+
 dev-template: $(JSONNET) $(JSONNETFMT) $(GOJSONTOYAML)
-	echo "Running dev rbac templates"
-	$(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i jsonnet/ocp-manifests.jsonnet
+	echo "Running dev templates"
+	$(JSONNETFMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i jsonnet/dev-manifests.jsonnet
 	$(JSONNET) -m $(DEV_MANIFESTS) jsonnet/dev-manifests.jsonnet | $(XARGS) -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml' -- {}
 	make clean
+
 .PHONY: manifests
-manifests: rbac-template dev-template
+manifests: dev-template

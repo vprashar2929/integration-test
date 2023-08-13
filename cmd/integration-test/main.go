@@ -6,11 +6,13 @@ import (
 	"flag"
 	"time"
 
-	"github.com/vprashar2929/rhobs-test/pkg/client"
-	"github.com/vprashar2929/rhobs-test/pkg/deployment"
-	"github.com/vprashar2929/rhobs-test/pkg/logger"
-	"github.com/vprashar2929/rhobs-test/pkg/service"
-	"github.com/vprashar2929/rhobs-test/pkg/statefulset"
+	"github.com/vprashar2929/integration-test/pkg/client"
+	"github.com/vprashar2929/integration-test/pkg/daemonset"
+	"github.com/vprashar2929/integration-test/pkg/deployment"
+	"github.com/vprashar2929/integration-test/pkg/logger"
+	"github.com/vprashar2929/integration-test/pkg/replicaset"
+	"github.com/vprashar2929/integration-test/pkg/service"
+	"github.com/vprashar2929/integration-test/pkg/statefulset"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -85,6 +87,16 @@ func main() {
 	err = service.CheckServices(cfg.NsList, cfg.ClientSet, interval, timeout)
 	if err != nil {
 		logger.AppLog.LogError("cannot validate services. reason: %v\n", err)
+		errList = append(errList, err)
+	}
+	err = replicaset.CheckReplicaSets(cfg.NsList, cfg.ClientSet, interval, timeout)
+	if err != nil {
+		logger.AppLog.LogError("cannot validate replicasets. reason: %v\n", err)
+		errList = append(errList, err)
+	}
+	err = daemonset.CheckDaemonSets(cfg.NsList, cfg.ClientSet, interval, timeout)
+	if err != nil {
+		logger.AppLog.LogError("cannot validate daemonsets. reason: %v\n", err)
 		errList = append(errList, err)
 	}
 	if len(errList) > 0 {
